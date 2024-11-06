@@ -99,6 +99,8 @@ src="/_sphinx/documentation_options.js"></script>
 </li>
 <li><a href="layer.html#captum.attr.LayerFeatureAblation.attribute">(captum.attr.LayerFeatureAblation method)</a>
 </li>
+<li><a href="layer.html#captum.attr.LayerFeaturePermutation.attribute">(captum.attr.LayerFeaturePermutation method)</a>
+</li>
 <li><a href="layer.html#captum.attr.LayerGradCam.attribute">(captum.attr.LayerGradCam method)</a>
 </li>
 <li><a href="layer.html#captum.attr.LayerGradientShap.attribute">(captum.attr.LayerGradientShap method)</a>
@@ -150,6 +152,41 @@ src="/_sphinx/documentation_options.js"></script>
 </ul></li>
 </ul></td>
 <td style="width: 33%; vertical-align: top;"><ul>
+<li><a href="base_classes.html#captum.attr.Attribution.attribute_future">attribute_future (captum.attr.Attribution attribute)</a>
+</li>
+<li><a href="deep_lift.html#captum.attr.DeepLift.attribute_future">attribute_future() (captum.attr.DeepLift method)</a>
+<ul>
+<li><a href="feature_ablation.html#captum.attr.FeatureAblation.attribute_future">(captum.attr.FeatureAblation method)</a>
+</li>
+<li><a href="feature_permutation.html#captum.attr.FeaturePermutation.attribute_future">(captum.attr.FeaturePermutation method)</a>
+</li>
+<li><a href="gradient_shap.html#captum.attr.GradientShap.attribute_future">(captum.attr.GradientShap method)</a>
+</li>
+<li><a href="input_x_gradient.html#captum.attr.InputXGradient.attribute_future">(captum.attr.InputXGradient method)</a>
+</li>
+<li><a href="integrated_gradients.html#captum.attr.IntegratedGradients.attribute_future">(captum.attr.IntegratedGradients method)</a>
+</li>
+<li><a href="kernel_shap.html#captum.attr.KernelShap.attribute_future">(captum.attr.KernelShap method)</a>
+</li>
+<li><a href="lime.html#captum.attr.Lime.attribute_future">(captum.attr.Lime method)</a>
+</li>
+<li><a href="lime.html#captum.attr.LimeBase.attribute_future">(captum.attr.LimeBase method)</a>
+</li>
+<li><a href="llm_attr.html#captum.attr.LLMAttribution.attribute_future">(captum.attr.LLMAttribution method)</a>
+</li>
+<li><a href="llm_attr.html#captum.attr.LLMGradientAttribution.attribute_future">(captum.attr.LLMGradientAttribution method)</a>
+</li>
+<li><a href="lrp.html#captum.attr.LRP.attribute_future">(captum.attr.LRP method)</a>
+</li>
+<li><a href="noise_tunnel.html#captum.attr.NoiseTunnel.attribute_future">(captum.attr.NoiseTunnel method)</a>
+</li>
+<li><a href="occlusion.html#captum.attr.Occlusion.attribute_future">(captum.attr.Occlusion method)</a>
+</li>
+<li><a href="saliency.html#captum.attr.Saliency.attribute_future">(captum.attr.Saliency method)</a>
+</li>
+<li><a href="shapley_value_sampling.html#captum.attr.ShapleyValueSampling.attribute_future">(captum.attr.ShapleyValueSampling method)</a>
+</li>
+</ul></li>
 <li><a href="base_classes.html#captum.attr.Attribution">Attribution (class in captum.attr)</a>
 </li>
 <li><a href="insights.html#captum.insights.AttributionVisualizer">AttributionVisualizer (class in captum.insights)</a>
@@ -412,14 +449,16 @@ src="/_sphinx/documentation_options.js"></script>
 </li>
 <li><a href="layer.html#captum.attr.LayerFeatureAblation">LayerFeatureAblation (class in captum.attr)</a>
 </li>
+<li><a href="layer.html#captum.attr.LayerFeaturePermutation">LayerFeaturePermutation (class in captum.attr)</a>
+</li>
 <li><a href="layer.html#captum.attr.LayerGradCam">LayerGradCam (class in captum.attr)</a>
 </li>
 <li><a href="layer.html#captum.attr.LayerGradientShap">LayerGradientShap (class in captum.attr)</a>
 </li>
-<li><a href="layer.html#captum.attr.LayerGradientXActivation">LayerGradientXActivation (class in captum.attr)</a>
-</li>
 </ul></td>
 <td style="width: 33%; vertical-align: top;"><ul>
+<li><a href="layer.html#captum.attr.LayerGradientXActivation">LayerGradientXActivation (class in captum.attr)</a>
+</li>
 <li><a href="layer.html#captum.attr.LayerIntegratedGradients">LayerIntegratedGradients (class in captum.attr)</a>
 </li>
 <li><a href="layer.html#captum.attr.LayerLRP">LayerLRP (class in captum.attr)</a>
@@ -637,10 +676,18 @@ src="/_sphinx/documentation_options.js"></script>
 </div>
 </div>
 </div>
-<div aria-label="main navigation" class="sphinxsidebar" role="navigation">
+<div aria-label="Main" class="sphinxsidebar" role="navigation">
 <div class="sphinxsidebarwrapper">
 <h1 class="logo"><a href="index.html">Captum</a></h1>
-<h3>Navigation</h3>
+<search id="searchbox" role="search" style="display: none">
+<div class="searchformwrapper">
+<form action="search.html" class="search" method="get">
+<input aria-labelledby="searchlabel" autocapitalize="off" autocomplete="off" autocorrect="off" name="q" placeholder="Search" spellcheck="false" type="text"/>
+<input type="submit" value="Go"/>
+</form>
+</div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="attribution.html">Attribution</a></li>
@@ -668,16 +715,6 @@ src="/_sphinx/documentation_options.js"></script>
 </ul></li>
 </ul>
 </div>
-<div id="searchbox" role="search" style="display: none">
-<h3 id="searchlabel">Quick search</h3>
-<div class="searchformwrapper">
-<form action="search.html" class="search" method="get">
-<input aria-labelledby="searchlabel" autocapitalize="off" autocomplete="off" autocorrect="off" name="q" spellcheck="false" type="text"/>
-<input type="submit" value="Go"/>
-</form>
-</div>
-</div>
-<script>document.getElementById('searchbox').style.display = "block"</script>
 </div>
 </div>
 <div class="clearer"></div>
