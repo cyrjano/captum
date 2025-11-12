@@ -4,7 +4,18 @@
 
 import logging
 import math
-from typing import Any, Callable, cast, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    cast,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import torch
 from captum._utils.common import (
@@ -35,6 +46,94 @@ from tqdm.auto import tqdm
 IterableType = TypeVar("IterableType")
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+
+def _parse_forward_out(forward_output: object) -> Tensor:
+    """
+    A temp wrapper for global _run_forward util to force forward output
+    type assertion & conversion.
+    Remove after the strict logic is supported by all attr classes
+    """
+    if isinstance(forward_output, Tensor):
+        return forward_output
+
+    output_type = type(forward_output)
+    assert output_type is int or output_type is float, (
+        "the return of forward_func must be a tensor, int, or float,"
+        f" received: {forward_output}"
+    )
+
+    # using python built-in type as torch dtype
+    # int -> torch.int64, float -> torch.float64
+    # ref: https://github.com/pytorch/pytorch/pull/21215
+    return torch.tensor(forward_output, dtype=cast(dtype, output_type))
+
+
+def process_initial_eval(
+    initial_eval: Tensor,
+    inputs: Iterable[Tensor],
+    use_weights: bool = False,
+) -> Tuple[List[Tensor], List[Tensor], Tensor, Tensor, int, dtype]:
+
+    initial_eval = _parse_forward_out(initial_eval)
+
+    # number of elements in the output of forward_func
+    n_outputs = initial_eval.numel() if isinstance(initial_eval, Tensor) else 1
+
+    # flatten eval outputs into 1D (n_outputs)
+    # add the leading dim for n_feature_perturbed
+    flattened_initial_eval = initial_eval.reshape(1, -1)
+
+    # Initialize attribution totals and counts
+    attrib_type = flattened_initial_eval.dtype
+
+    total_attrib = [
+        # attribute w.r.t each output element
+        torch.zeros(
+            (n_outputs,) + input.shape[1:],
+            dtype=attrib_type,
+            device=input.device,
+        )
+        for input in inputs
+    ]
+
+    # Weights are used in cases where ablations may be overlapping.
+    weights = []
+    if use_weights:
+        weights = [
+            torch.zeros((n_outputs,) + input.shape[1:], device=input.device).float()
+            for input in inputs
+        ]
+
+    return (
+        total_attrib,
+        weights,
+        initial_eval,
+        flattened_initial_eval,
+        n_outputs,
+        attrib_type,
+    )
+
+
+def format_result(
+    total_attrib: List[Tensor],
+    weights: List[Tensor],
+    is_inputs_tuple: bool,
+    use_weights: bool,
+) -> Union[Tensor, Tuple[Tensor, ...]]:
+    """
+    Normalizes attributions by weights if enabled and
+    formats output as single tensor or tuple.
+    """
+    # Divide total attributions by counts and return formatted attributions
+    if use_weights:
+        attrib = tuple(
+            single_attrib.float() / weight
+            for single_attrib, weight in zip(total_attrib, weights)
+        )
+    else:
+        attrib = tuple(total_attrib)
+    return _format_output(is_inputs_tuple, attrib)
 
 
 class FeatureAblation(PerturbationAttribution):
@@ -331,9 +430,8 @@ class FeatureAblation(PerturbationAttribution):
                 flattened_initial_eval,
                 n_outputs,
                 attrib_type,
-            ) = self._process_initial_eval(
-                initial_eval,
-                formatted_inputs,
+            ) = process_initial_eval(
+                initial_eval, formatted_inputs, use_weights=self.use_weights
             )
 
             total_attrib, weights = self._attribute_with_cross_tensor_feature_masks(
@@ -358,7 +456,9 @@ class FeatureAblation(PerturbationAttribution):
 
         return cast(
             TensorOrTupleOfTensorsGeneric,
-            self._generate_result(total_attrib, weights, is_inputs_tuple),
+            format_result(
+                total_attrib, weights, is_inputs_tuple, use_weights=self.use_weights
+            ),
         )
 
     def _attribute_with_cross_tensor_feature_masks(
@@ -586,8 +686,8 @@ class FeatureAblation(PerturbationAttribution):
                     "initial_eval_to_processed_initial_eval_fut: "
                     "initial_eval should be a Tensor"
                 )
-            result = self._process_initial_eval(
-                initial_eval_processed, formatted_inputs
+            result = process_initial_eval(
+                initial_eval_processed, formatted_inputs, use_weights=self.use_weights
             )
 
         except FeatureAblationFutureError as e:
@@ -886,10 +986,8 @@ class FeatureAblation(PerturbationAttribution):
             )
 
         result_fut = collect_all(accumulate_fut_list).then(
-            lambda x: self._generate_result(
-                total_attrib,
-                weights,
-                is_inputs_tuple,
+            lambda x: format_result(
+                total_attrib, weights, is_inputs_tuple, use_weights=self.use_weights
             )
         )
 
@@ -955,70 +1053,6 @@ class FeatureAblation(PerturbationAttribution):
             ) from e
         return total_attrib, weights
 
-    def _parse_forward_out(self, forward_output: Tensor) -> Tensor:
-        """
-        A temp wrapper for global _run_forward util to force forward output
-        type assertion & conversion.
-        Remove after the strict logic is supported by all attr classes
-        """
-        if isinstance(forward_output, Tensor):
-            return forward_output
-
-        output_type = type(forward_output)
-        assert output_type is int or output_type is float, (
-            "the return of forward_func must be a tensor, int, or float,"
-            f" received: {forward_output}"
-        )
-
-        # using python built-in type as torch dtype
-        # int -> torch.int64, float -> torch.float64
-        # ref: https://github.com/pytorch/pytorch/pull/21215
-        return torch.tensor(forward_output, dtype=cast(dtype, output_type))
-
-    def _process_initial_eval(
-        self,
-        initial_eval: Tensor,
-        inputs: TensorOrTupleOfTensorsGeneric,
-    ) -> Tuple[List[Tensor], List[Tensor], Tensor, Tensor, int, dtype]:
-        initial_eval = self._parse_forward_out(initial_eval)
-
-        # number of elements in the output of forward_func
-        n_outputs = initial_eval.numel() if isinstance(initial_eval, Tensor) else 1
-
-        # flatten eval outputs into 1D (n_outputs)
-        # add the leading dim for n_feature_perturbed
-        flattened_initial_eval = initial_eval.reshape(1, -1)
-
-        # Initialize attribution totals and counts
-        attrib_type = flattened_initial_eval.dtype
-
-        total_attrib = [
-            # attribute w.r.t each output element
-            torch.zeros(
-                (n_outputs,) + input.shape[1:],
-                dtype=attrib_type,
-                device=input.device,
-            )
-            for input in inputs
-        ]
-
-        # Weights are used in cases where ablations may be overlapping.
-        weights = []
-        if self.use_weights:
-            weights = [
-                torch.zeros((n_outputs,) + input.shape[1:], device=input.device).float()
-                for input in inputs
-            ]
-
-        return (
-            total_attrib,
-            weights,
-            initial_eval,
-            flattened_initial_eval,
-            n_outputs,
-            attrib_type,
-        )
-
     def _process_ablated_out_full(
         self,
         modified_eval: Tensor,
@@ -1033,7 +1067,7 @@ class FeatureAblation(PerturbationAttribution):
         attrib_type: dtype,
         perturbations_per_eval: int,
     ) -> Tuple[List[Tensor], List[Tensor]]:
-        modified_eval = self._parse_forward_out(modified_eval)
+        modified_eval = _parse_forward_out(modified_eval)
         # if perturbations_per_eval > 1, the output shape must grow with
         # input and not be aggregated
         current_batch_size = inputs[0].shape[0]
@@ -1086,19 +1120,3 @@ class FeatureAblation(PerturbationAttribution):
             total_attrib[i] += (eval_diff * mask.to(attrib_type)).sum(dim=0)
 
         return total_attrib, weights
-
-    def _generate_result(
-        self,
-        total_attrib: List[Tensor],
-        weights: List[Tensor],
-        is_inputs_tuple: bool,
-    ) -> Union[Tensor, Tuple[Tensor, ...]]:
-        # Divide total attributions by counts and return formatted attributions
-        if self.use_weights:
-            attrib = tuple(
-                single_attrib.float() / weight
-                for single_attrib, weight in zip(total_attrib, weights)
-            )
-        else:
-            attrib = tuple(total_attrib)
-        return _format_output(is_inputs_tuple, attrib)

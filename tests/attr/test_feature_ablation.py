@@ -12,7 +12,11 @@ from typing import Any, cast, List, Tuple, Union
 import torch
 from captum._utils.common import _construct_future_forward
 from captum._utils.typing import BaselineType, TargetType, TensorOrTupleOfTensorsGeneric
-from captum.attr._core.feature_ablation import FeatureAblation
+from captum.attr._core.feature_ablation import (
+    _parse_forward_out,
+    FeatureAblation,
+    format_result,
+)
 from captum.attr._core.noise_tunnel import NoiseTunnel
 from captum.attr._utils.attribution import Attribution
 from captum.testing.helpers import BaseTest
@@ -595,7 +599,6 @@ class Test(BaseTest):
             fut.set_result(out)
 
         def forward_func(inp: Tensor) -> torch.futures.Future[Tensor]:
-            # pyre-fixme[29]: `typing.Type[torch.futures.Future]` is not a function.
             fut: torch.futures.Future[Tensor] = torch.futures.Future()
             t = threading.Thread(target=slow_set_future, args=(fut, inp))
             t.start()
@@ -898,6 +901,116 @@ class Test(BaseTest):
                 self.assertEqual(attributions.shape, expected_ablation.shape)
                 self.assertEqual(attributions.dtype, expected_ablation.dtype)
                 assertTensorAlmostEqual(self, attributions, expected_ablation)
+
+
+class TestParseForwardOutput(BaseTest):
+
+    def test_parse_forward_out_tensor_passthrough(self) -> None:
+        input_tensor = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        result = _parse_forward_out(input_tensor)
+
+        self.assertIs(result, input_tensor)
+        assertTensorAlmostEqual(self, result, input_tensor)
+
+    def test_parse_forward_out_python_int(self) -> None:
+        input_value = 42
+        result = _parse_forward_out(input_value)
+
+        self.assertIsInstance(result, Tensor)
+        self.assertEqual(result.dtype, torch.int64)
+        assertTensorAlmostEqual(self, result, torch.tensor(42))
+
+    def test_parse_forward_out_python_float(self) -> None:
+        input_value = 3.14
+        result = _parse_forward_out(input_value)
+
+        self.assertIsInstance(result, Tensor)
+        self.assertEqual(result.dtype, torch.float64)
+        assertTensorAlmostEqual(self, result, torch.tensor(3.14))
+
+    def test_parse_forward_out_invalid_none(self) -> None:
+        with self.assertRaises(AssertionError):
+            _parse_forward_out(None)
+
+
+class TestFormatResult(BaseTest):
+
+    def test_format_result_single_tensor_no_weights(self) -> None:
+        total_attrib = [torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])]
+        weights = []
+        is_inputs_tuple = False
+        use_weights = False
+
+        result = format_result(total_attrib, weights, is_inputs_tuple, use_weights)
+
+        self.assertIsInstance(result, Tensor)
+        assert isinstance(result, Tensor)  # Type narrowing for pyre
+        self.assertEqual(result.shape, (2, 3))
+        assertTensorAlmostEqual(
+            self, result, torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+        )
+
+    def test_format_result_tuple_output_no_weights(self) -> None:
+        total_attrib = [
+            torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+            torch.tensor([[5.0, 6.0], [7.0, 8.0]]),
+        ]
+        weights = []
+        is_inputs_tuple = True
+        use_weights = False
+
+        result = format_result(total_attrib, weights, is_inputs_tuple, use_weights)
+
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(len(result), 2)
+        assertTensorAlmostEqual(self, result[0], torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
+        assertTensorAlmostEqual(self, result[1], torch.tensor([[5.0, 6.0], [7.0, 8.0]]))
+
+    def test_format_result_single_tensor_with_weights(self) -> None:
+        total_attrib = [torch.tensor([[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]])]
+        weights = [torch.tensor([[2.0, 4.0, 5.0], [8.0, 10.0, 12.0]])]
+        is_inputs_tuple = False
+        use_weights = True
+
+        result = format_result(total_attrib, weights, is_inputs_tuple, use_weights)
+
+        self.assertIsInstance(result, Tensor)
+        expected = torch.tensor([[5.0, 5.0, 6.0], [5.0, 5.0, 5.0]])
+        assertTensorAlmostEqual(self, result, expected)
+
+    def test_format_result_tuple_output_with_weights(self) -> None:
+        total_attrib = [
+            torch.tensor([[10.0, 20.0], [30.0, 40.0]]),
+            torch.tensor([[50.0, 60.0], [70.0, 80.0]]),
+        ]
+        weights = [
+            torch.tensor([[2.0, 4.0], [5.0, 8.0]]),
+            torch.tensor([[10.0, 12.0], [14.0, 16.0]]),
+        ]
+        is_inputs_tuple = True
+        use_weights = True
+
+        result = format_result(total_attrib, weights, is_inputs_tuple, use_weights)
+
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(len(result), 2)
+        assertTensorAlmostEqual(self, result[0], torch.tensor([[5.0, 5.0], [6.0, 5.0]]))
+        assertTensorAlmostEqual(self, result[1], torch.tensor([[5.0, 5.0], [5.0, 5.0]]))
+
+    def test_format_result_integer_dtype_no_weights(self) -> None:
+        total_attrib = [torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.int32)]
+        weights = []
+        is_inputs_tuple = False
+        use_weights = False
+
+        result = format_result(total_attrib, weights, is_inputs_tuple, use_weights)
+
+        self.assertIsInstance(result, Tensor)
+        assert isinstance(result, Tensor)  # Type narrowing for pyre
+        self.assertEqual(result.dtype, torch.int32)
+        assertTensorAlmostEqual(
+            self, result, torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.int32)
+        )
 
 
 if __name__ == "__main__":
