@@ -57,8 +57,7 @@ def _parse_forward_out(forward_output: object) -> Tensor:
     if isinstance(forward_output, Tensor):
         return forward_output
 
-    output_type = type(forward_output)
-    assert output_type is int or output_type is float, (
+    assert isinstance(forward_output, (int, float)), (
         "the return of forward_func must be a tensor, int, or float,"
         f" received: {forward_output}"
     )
@@ -66,7 +65,7 @@ def _parse_forward_out(forward_output: object) -> Tensor:
     # using python built-in type as torch dtype
     # int -> torch.int64, float -> torch.float64
     # ref: https://github.com/pytorch/pytorch/pull/21215
-    return torch.tensor(forward_output, dtype=cast(dtype, output_type))
+    return torch.tensor(forward_output, dtype=cast(dtype, type(forward_output)))
 
 
 def process_initial_eval(
@@ -78,7 +77,7 @@ def process_initial_eval(
     initial_eval = _parse_forward_out(initial_eval)
 
     # number of elements in the output of forward_func
-    n_outputs = initial_eval.numel() if isinstance(initial_eval, Tensor) else 1
+    n_outputs = initial_eval.numel()
 
     # flatten eval outputs into 1D (n_outputs)
     # add the leading dim for n_feature_perturbed
@@ -87,10 +86,12 @@ def process_initial_eval(
     # Initialize attribution totals and counts
     attrib_type = flattened_initial_eval.dtype
 
+    # Shape of attribution is the outputs * inputs dimensions.
+    # where the inputs dimension should remove the batch size dimension.
     total_attrib = [
         # attribute w.r.t each output element
         torch.zeros(
-            (n_outputs,) + input.shape[1:],
+            (n_outputs, *input.shape[1:]),
             dtype=attrib_type,
             device=input.device,
         )
@@ -101,7 +102,7 @@ def process_initial_eval(
     weights = []
     if use_weights:
         weights = [
-            torch.zeros((n_outputs,) + input.shape[1:], device=input.device).float()
+            torch.zeros((n_outputs, *input.shape[1:]), device=input.device)
             for input in inputs
         ]
 
@@ -137,7 +138,7 @@ def format_result(
 
 
 class FeatureAblation(PerturbationAttribution):
-    r"""
+    """
     A perturbation based approach to computing attribution, involving
     replacing each input feature with a given baseline / reference, and
     computing the difference in output. By default, each scalar value within
@@ -377,7 +378,8 @@ class FeatureAblation(PerturbationAttribution):
             >>> attr = ablator.attribute(input, target=1, feature_mask=feature_mask)
         """
         # Keeps track whether original input is a tuple or not before
-        # converting it into a tuple.
+        # converting it into a tuple. We return the attribution as tuple in the
+        # end if the inputs where tuple.
         is_inputs_tuple = _is_tuple(inputs)
 
         formatted_inputs, baselines = _format_input_baseline(inputs, baselines)
