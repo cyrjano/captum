@@ -12,6 +12,7 @@ from typing import (
     Iterable,
     List,
     Optional,
+    Protocol,
     Tuple,
     TypeVar,
     Union,
@@ -41,11 +42,26 @@ from captum.log import log_usage
 from torch import dtype, Tensor
 from torch.futures import collect_all, Future
 
-from tqdm.auto import tqdm
 
 IterableType = TypeVar("IterableType")
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+
+class Progress(Protocol):
+    def update(self, n: int = 1) -> Optional[bool]:
+        """TQDM Update  method signature."""
+
+    def close(self) -> None:
+        """TQDM Close method signature."""
+
+
+class NullProgress:
+    def update(self, n: int = 1) -> Optional[bool]:
+        return None
+
+    def close(self) -> None:
+        return None
 
 
 def _parse_forward_out(forward_output: object) -> Tensor:
@@ -392,7 +408,7 @@ class FeatureAblation(PerturbationAttribution):
             isinstance(perturbations_per_eval, int) and perturbations_per_eval >= 1
         ), "Perturbations per evaluation must be an integer and at least 1."
         with torch.no_grad():
-            attr_progress = None
+            attr_progress: Progress
             if show_progress:
                 attr_progress = self._attribute_progress_setup(
                     formatted_inputs,
@@ -400,7 +416,10 @@ class FeatureAblation(PerturbationAttribution):
                     **kwargs,
                     perturbations_per_eval=perturbations_per_eval,
                 )
-                attr_progress.update(0)
+            else:
+                attr_progress = NullProgress()
+
+            attr_progress.update(0)
 
             # Computes initial evaluation with all features, which is compared
             # to each ablated result.
@@ -410,8 +429,8 @@ class FeatureAblation(PerturbationAttribution):
                 target,
                 formatted_additional_forward_args,
             )
-            if attr_progress is not None:
-                attr_progress.update()
+
+            attr_progress.update()
 
             total_attrib: List[Tensor] = []
             weights: List[Tensor] = []
@@ -453,8 +472,7 @@ class FeatureAblation(PerturbationAttribution):
                 **kwargs,
             )
 
-        if attr_progress is not None:
-            attr_progress.close()
+        attr_progress.close()
 
         return cast(
             TensorOrTupleOfTensorsGeneric,
@@ -470,7 +488,7 @@ class FeatureAblation(PerturbationAttribution):
         target: TargetType,
         baselines: BaselineType,
         formatted_feature_mask: Tuple[Tensor, ...],
-        attr_progress: Optional[tqdm],
+        attr_progress: Progress,
         flattened_initial_eval: Tensor,
         initial_eval: Tensor,
         n_outputs: int,
@@ -564,8 +582,7 @@ class FeatureAblation(PerturbationAttribution):
                 current_additional_args,
             )
 
-            if attr_progress is not None:
-                attr_progress.update()
+            attr_progress.update()
 
             assert not isinstance(modified_eval, torch.Future), (
                 "when use_futures is True, modified_eval should have "
@@ -728,7 +745,7 @@ class FeatureAblation(PerturbationAttribution):
             isinstance(perturbations_per_eval, int) and perturbations_per_eval >= 1
         ), "Perturbations per evaluation must be an integer and at least 1."
         with torch.no_grad():
-            attr_progress = None
+            attr_progress: Progress
             if show_progress:
                 attr_progress = self._attribute_progress_setup(
                     formatted_inputs,
@@ -736,7 +753,9 @@ class FeatureAblation(PerturbationAttribution):
                     **kwargs,
                     perturbations_per_eval=perturbations_per_eval,
                 )
-                attr_progress.update(0)
+            else:
+                attr_progress = NullProgress()
+            attr_progress.update(0)
 
             # Computes initial evaluation with all features, which is compared
             # to each ablated result.
@@ -747,8 +766,7 @@ class FeatureAblation(PerturbationAttribution):
                 formatted_additional_forward_args,
             )
 
-            if attr_progress is not None:
-                attr_progress.update()
+            attr_progress.update()
 
             processed_initial_eval_fut: Optional[
                 Future[Tuple[List[Tensor], List[Tensor], Tensor, Tensor, int, dtype]]
@@ -789,7 +807,7 @@ class FeatureAblation(PerturbationAttribution):
         target: TargetType,
         baselines: BaselineType,
         formatted_feature_mask: Tuple[Tensor, ...],
-        attr_progress: Optional[tqdm],
+        attr_progress: Progress,
         processed_initial_eval_fut: Future[
             Tuple[List[Tensor], List[Tensor], Tensor, Tensor, int, dtype]
         ],
@@ -883,8 +901,7 @@ class FeatureAblation(PerturbationAttribution):
                 current_additional_args,
             )
 
-            if attr_progress is not None:
-                attr_progress.update()
+            attr_progress.update()
 
             if not isinstance(modified_eval, torch.Future):
                 raise AssertionError(
@@ -928,8 +945,7 @@ class FeatureAblation(PerturbationAttribution):
 
             all_modified_eval_futures.append(ablated_out_fut)
 
-        if attr_progress is not None:
-            attr_progress.close()
+        attr_progress.close()
 
         return self._generate_async_result_cross_tensor(
             all_modified_eval_futures,
@@ -959,7 +975,7 @@ class FeatureAblation(PerturbationAttribution):
         feature_mask: Tuple[Tensor, ...],
         perturbations_per_eval: int,
         **kwargs: Any,
-    ) -> tqdm:
+    ) -> Progress:
         total_forwards = math.ceil(
             get_total_features_from_mask(feature_mask) / perturbations_per_eval
         )
