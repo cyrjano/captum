@@ -90,8 +90,6 @@ def process_initial_eval(
     use_weights: bool = False,
 ) -> Tuple[List[Tensor], List[Tensor], Tensor, Tensor, int, dtype]:
 
-    initial_eval = _parse_forward_out(initial_eval)
-
     # number of elements in the output of forward_func
     n_outputs = initial_eval.numel()
 
@@ -151,6 +149,74 @@ def format_result(
     else:
         attrib = tuple(total_attrib)
     return _format_output(is_inputs_tuple, attrib)
+
+
+def check_output_shape_valid(
+    inputs: TensorOrTupleOfTensorsGeneric,
+    num_examples: int,
+    initial_eval: Tensor,
+    modified_eval: Tensor,
+    perturbations_per_eval: int,
+) -> None:
+    """
+    Validates that the forward function's output shape scales correctly with
+    input batch size when perturbations_per_eval > 1.
+
+    When multiple perturbations are evaluated simultaneously
+    (perturbations_per_eval > 1),
+    the forward function must return outputs whose first dimension grows proportionally
+    with the input batch size. This ensures the forward function is not aggregating
+    results across the batch, which would prevent correct attribution calculation.
+
+    Args:
+        inputs (Tensor or tuple[Tensor, ...]): Input tensors used for evaluation.
+                    The first dimension of inputs[0] is used to determine current
+                    batch size.
+        num_examples (int): The original number of examples (batch size) before
+                    expansion for perturbations.
+        initial_eval (Tensor): Output from forward function with original batch size
+                    (perturbations_per_eval = 1). Used as baseline for shape comparison.
+        modified_eval (Tensor): Output from forward function with expanded batch size
+                    (batch_size = num_examples * n_perturb).
+        perturbations_per_eval (int): Number of perturbations processed simultaneously.
+                    Validation only occurs when this value is greater than 1.
+
+    Raises:
+        AssertionError: If perturbations_per_eval > 1 and the output shape does not
+                    scale correctly. Specifically, if modified_eval.shape[0] is not
+                    equal to n_perturb * initial_eval.shape[0], where n_perturb is
+                    the ratio of current batch size to original batch size.
+    """
+
+    if perturbations_per_eval > 1:
+        # if perturbations_per_eval > 1, the output shape must grow with
+        # input and not be aggregated
+        current_batch_size = inputs[0].shape[0]
+
+        # number of perturbation, which is not the same as
+        # perturbations_per_eval when not enough features to perturb
+        n_perturb: int = current_batch_size // num_examples
+        mod_perturb: int = current_batch_size % num_examples
+        current_output_shape = modified_eval.shape
+
+        # use initial_eval as the forward of perturbations_per_eval = 1
+        initial_output_shape = initial_eval.shape
+
+        assert (
+            # check if the output is not a scalar
+            current_output_shape
+            and initial_output_shape
+            and mod_perturb == 0
+            # check if the output grow in same ratio, i.e., not agg
+            and current_output_shape[0] == n_perturb * initial_output_shape[0]
+        ), (
+            "When perturbations_per_eval > 1, forward_func's output "
+            "should be a tensor whose 1st dim grow with the input "
+            f"batch size: when input batch size is {num_examples}, "
+            f"the output shape is {initial_output_shape}; "
+            f"when input batch size is {current_batch_size}, "
+            f"the output shape is {current_output_shape}"
+        )
 
 
 class FeatureAblation(PerturbationAttribution):
@@ -395,7 +461,7 @@ class FeatureAblation(PerturbationAttribution):
         """
         # Keeps track whether original input is a tuple or not before
         # converting it into a tuple. We return the attribution as tuple in the
-        # end if the inputs where tuple.
+        # end if the inputs were a tuple.
         is_inputs_tuple = _is_tuple(inputs)
 
         formatted_inputs, baselines = _format_input_baseline(inputs, baselines)
@@ -443,7 +509,7 @@ class FeatureAblation(PerturbationAttribution):
                     "when using the attribute function, initial_eval should have "
                     f"non-Future type rather than {type(initial_eval)}"
                 )
-
+            initial_eval = _parse_forward_out(initial_eval)
             (
                 total_attrib,
                 weights,
@@ -581,6 +647,7 @@ class FeatureAblation(PerturbationAttribution):
                 current_target,
                 current_additional_args,
             )
+            modified_eval = _parse_forward_out(modified_eval)
 
             attr_progress.update()
 
@@ -588,19 +655,25 @@ class FeatureAblation(PerturbationAttribution):
                 "when use_futures is True, modified_eval should have "
                 f"non-Future type rather than {type(modified_eval)}"
             )
-
+            # Just do the check once.
+            if not self._is_output_shape_valid:
+                check_output_shape_valid(
+                    inputs=current_inputs,
+                    num_examples=num_examples,
+                    initial_eval=initial_eval,
+                    modified_eval=modified_eval,
+                    perturbations_per_eval=perturbations_per_eval,
+                )
+                self._is_output_shape_valid = True
             total_attrib, weights = self._process_ablated_out_full(
-                modified_eval,
-                current_masks,
-                flattened_initial_eval,
-                initial_eval,
-                current_inputs,
-                n_outputs,
-                num_examples,
-                total_attrib,
-                weights,
-                attrib_type,
-                perturbations_per_eval,
+                modified_eval=modified_eval,
+                current_mask=current_masks,
+                flattened_initial_eval=flattened_initial_eval,
+                inputs=current_inputs,
+                n_outputs=n_outputs,
+                total_attrib=total_attrib,
+                weights=weights,
+                attrib_type=attrib_type,
             )
         return total_attrib, weights
 
@@ -705,6 +778,7 @@ class FeatureAblation(PerturbationAttribution):
                     "initial_eval_to_processed_initial_eval_fut: "
                     "initial_eval should be a Tensor"
                 )
+            initial_eval_processed = _parse_forward_out(initial_eval_processed)
             result = process_initial_eval(
                 initial_eval_processed, formatted_inputs, use_weights=self.use_weights
             )
@@ -1039,6 +1113,7 @@ class FeatureAblation(PerturbationAttribution):
                     "total_attrib, weights, initial_eval, "
                     "flattened_initial_eval, n_outputs, attrib_type "
                 )
+            modified_eval = _parse_forward_out(modified_eval)
             if not isinstance(modified_eval, Tensor):
                 raise AssertionError(
                     "_eval_fut_to_ablated_out_fut_cross_tensor: "
@@ -1052,13 +1127,21 @@ class FeatureAblation(PerturbationAttribution):
                 n_outputs,
                 attrib_type,
             ) = initial_eval_tuple
+            # Just do the check once.
+            if not self._is_output_shape_valid:
+                check_output_shape_valid(
+                    inputs=current_inputs,
+                    num_examples=num_examples,
+                    initial_eval=initial_eval,
+                    modified_eval=modified_eval,
+                    perturbations_per_eval=perturbations_per_eval,
+                )
+                self._is_output_shape_valid = True
+
             total_attrib, weights = self._process_ablated_out_full(
                 modified_eval=modified_eval,
                 inputs=current_inputs,
                 current_mask=current_mask,
-                perturbations_per_eval=perturbations_per_eval,
-                num_examples=num_examples,
-                initial_eval=initial_eval,
                 flattened_initial_eval=flattened_initial_eval,
                 n_outputs=n_outputs,
                 total_attrib=total_attrib,
@@ -1076,47 +1159,12 @@ class FeatureAblation(PerturbationAttribution):
         modified_eval: Tensor,
         current_mask: Tuple[Optional[Tensor], ...],
         flattened_initial_eval: Tensor,
-        initial_eval: Tensor,
         inputs: TensorOrTupleOfTensorsGeneric,
         n_outputs: int,
-        num_examples: int,
         total_attrib: List[Tensor],
         weights: List[Tensor],
         attrib_type: dtype,
-        perturbations_per_eval: int,
     ) -> Tuple[List[Tensor], List[Tensor]]:
-        modified_eval = _parse_forward_out(modified_eval)
-        # if perturbations_per_eval > 1, the output shape must grow with
-        # input and not be aggregated
-        current_batch_size = inputs[0].shape[0]
-
-        # number of perturbation, which is not the same as
-        # perturbations_per_eval when not enough features to perturb
-        n_perturb = current_batch_size / num_examples
-        if perturbations_per_eval > 1 and not self._is_output_shape_valid:
-
-            current_output_shape = modified_eval.shape
-
-            # use initial_eval as the forward of perturbations_per_eval = 1
-            initial_output_shape = initial_eval.shape
-
-            assert (
-                # check if the output is not a scalar
-                current_output_shape
-                and initial_output_shape
-                # check if the output grow in same ratio, i.e., not agg
-                and current_output_shape[0] == n_perturb * initial_output_shape[0]
-            ), (
-                "When perturbations_per_eval > 1, forward_func's output "
-                "should be a tensor whose 1st dim grow with the input "
-                f"batch size: when input batch size is {num_examples}, "
-                f"the output shape is {initial_output_shape}; "
-                f"when input batch size is {current_batch_size}, "
-                f"the output shape is {current_output_shape}"
-            )
-
-            self._is_output_shape_valid = True
-
         # reshape the leading dim for n_feature_perturbed
         # flatten each feature's eval outputs into 1D of (n_outputs)
         modified_eval = modified_eval.reshape(-1, n_outputs)
