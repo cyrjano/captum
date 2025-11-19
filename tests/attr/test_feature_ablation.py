@@ -14,6 +14,7 @@ from captum._utils.common import _construct_future_forward
 from captum._utils.typing import BaselineType, TargetType, TensorOrTupleOfTensorsGeneric
 from captum.attr._core.feature_ablation import (
     _parse_forward_out,
+    check_output_shape_valid,
     FeatureAblation,
     format_result,
 )
@@ -936,8 +937,10 @@ class TestParseForwardOutput(BaseTest):
 class TestFormatResult(BaseTest):
 
     def test_format_result_single_tensor_no_weights(self) -> None:
-        total_attrib = [torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])]
-        weights = []
+        total_attrib: list[torch.Tensor] = [
+            torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+        ]
+        weights: list[torch.Tensor] = []
         is_inputs_tuple = False
         use_weights = False
 
@@ -951,11 +954,11 @@ class TestFormatResult(BaseTest):
         )
 
     def test_format_result_tuple_output_no_weights(self) -> None:
-        total_attrib = [
+        total_attrib: list[torch.Tensor] = [
             torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
             torch.tensor([[5.0, 6.0], [7.0, 8.0]]),
         ]
-        weights = []
+        weights: list[torch.Tensor] = []
         is_inputs_tuple = True
         use_weights = False
 
@@ -967,8 +970,12 @@ class TestFormatResult(BaseTest):
         assertTensorAlmostEqual(self, result[1], torch.tensor([[5.0, 6.0], [7.0, 8.0]]))
 
     def test_format_result_single_tensor_with_weights(self) -> None:
-        total_attrib = [torch.tensor([[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]])]
-        weights = [torch.tensor([[2.0, 4.0, 5.0], [8.0, 10.0, 12.0]])]
+        total_attrib: list[torch.Tensor] = [
+            torch.tensor([[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]])
+        ]
+        weights: list[torch.Tensor] = [
+            torch.tensor([[2.0, 4.0, 5.0], [8.0, 10.0, 12.0]])
+        ]
         is_inputs_tuple = False
         use_weights = True
 
@@ -979,11 +986,11 @@ class TestFormatResult(BaseTest):
         assertTensorAlmostEqual(self, result, expected)
 
     def test_format_result_tuple_output_with_weights(self) -> None:
-        total_attrib = [
+        total_attrib: list[torch.Tensor] = [
             torch.tensor([[10.0, 20.0], [30.0, 40.0]]),
             torch.tensor([[50.0, 60.0], [70.0, 80.0]]),
         ]
-        weights = [
+        weights: list[torch.Tensor] = [
             torch.tensor([[2.0, 4.0], [5.0, 8.0]]),
             torch.tensor([[10.0, 12.0], [14.0, 16.0]]),
         ]
@@ -998,8 +1005,10 @@ class TestFormatResult(BaseTest):
         assertTensorAlmostEqual(self, result[1], torch.tensor([[5.0, 5.0], [5.0, 5.0]]))
 
     def test_format_result_integer_dtype_no_weights(self) -> None:
-        total_attrib = [torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.int32)]
-        weights = []
+        total_attrib: list[torch.Tensor] = [
+            torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.int32)
+        ]
+        weights: list[torch.Tensor] = []
         is_inputs_tuple = False
         use_weights = False
 
@@ -1011,6 +1020,70 @@ class TestFormatResult(BaseTest):
         assertTensorAlmostEqual(
             self, result, torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.int32)
         )
+
+
+class TestCheckOutputShapeValid(BaseTest):
+    def test_valid_output_shape_scaling(self) -> None:
+        inputs = (torch.randn(4, 3),)
+        num_examples = 2
+        initial_eval = torch.randn(2, 5)
+        modified_eval = torch.randn(4, 5)
+        perturbations_per_eval = 2
+
+        check_output_shape_valid(
+            inputs=inputs,
+            num_examples=num_examples,
+            initial_eval=initial_eval,
+            modified_eval=modified_eval,
+            perturbations_per_eval=perturbations_per_eval,
+        )
+
+    def test_invalid_output_shape_scaling(self) -> None:
+        inputs = (torch.randn(4, 3),)
+        num_examples = 2
+        initial_eval = torch.randn(2, 5)
+        modified_eval = torch.randn(6, 5)
+        perturbations_per_eval = 2
+
+        with self.assertRaises(AssertionError):
+            check_output_shape_valid(
+                inputs=inputs,
+                num_examples=num_examples,
+                initial_eval=initial_eval,
+                modified_eval=modified_eval,
+                perturbations_per_eval=perturbations_per_eval,
+            )
+
+    def test_skip_validation_when_perturbations_per_eval_is_one(self) -> None:
+        inputs = (torch.randn(4, 3),)
+        num_examples = 2
+        initial_eval = torch.randn(2, 5)
+        modified_eval = torch.randn(3, 5)
+        perturbations_per_eval = 1
+
+        check_output_shape_valid(
+            inputs=inputs,
+            num_examples=num_examples,
+            initial_eval=initial_eval,
+            modified_eval=modified_eval,
+            perturbations_per_eval=perturbations_per_eval,
+        )
+
+    def test_invalid_batch_size_not_divisible_by_num_examples(self) -> None:
+        inputs = (torch.randn(5, 3),)
+        num_examples = 2
+        initial_eval = torch.randn(2, 5)
+        modified_eval = torch.randn(5, 5)
+        perturbations_per_eval = 2
+
+        with self.assertRaises(AssertionError):
+            check_output_shape_valid(
+                inputs=inputs,
+                num_examples=num_examples,
+                initial_eval=initial_eval,
+                modified_eval=modified_eval,
+                perturbations_per_eval=perturbations_per_eval,
+            )
 
 
 if __name__ == "__main__":
