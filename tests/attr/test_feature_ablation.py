@@ -14,6 +14,7 @@ from captum._utils.common import _construct_future_forward
 from captum._utils.typing import BaselineType, TargetType, TensorOrTupleOfTensorsGeneric
 from captum.attr._core.feature_ablation import (
     _parse_forward_out,
+    _should_skip_inputs_and_warn,
     check_output_shape_valid,
     FeatureAblation,
     format_result,
@@ -1084,6 +1085,72 @@ class TestCheckOutputShapeValid(BaseTest):
                 modified_eval=modified_eval,
                 perturbations_per_eval=perturbations_per_eval,
             )
+
+
+class TestShouldSkipInputsAndWarn(BaseTest):
+    def test_skip_when_batch_size_less_than_min_examples(self) -> None:
+        current_feature_idxs = [0, 1]
+        feature_idx_to_tensor_idx = {0: [0], 1: [0]}
+        formatted_inputs = (torch.tensor([[1.0, 2.0], [3.0, 4.0]]),)
+        min_examples_per_batch_grouped = 3
+
+        with unittest.mock.patch(
+            "captum.attr._core.feature_ablation.logger"
+        ) as mock_logger:
+            result = _should_skip_inputs_and_warn(
+                current_feature_idxs,
+                feature_idx_to_tensor_idx,
+                formatted_inputs,
+                min_examples_per_batch_grouped,
+            )
+
+        self.assertTrue(result)
+        mock_logger.warning.assert_called_once()
+
+    def test_no_skip_when_batch_size_equal_to_min_examples(self) -> None:
+        current_feature_idxs = [0, 1]
+        feature_idx_to_tensor_idx = {0: [0], 1: [0]}
+        formatted_inputs = (torch.tensor([[1.0, 2.0], [3.0, 4.0]]),)
+        min_examples_per_batch_grouped = 2
+
+        result = _should_skip_inputs_and_warn(
+            current_feature_idxs,
+            feature_idx_to_tensor_idx,
+            formatted_inputs,
+            min_examples_per_batch_grouped,
+        )
+
+        self.assertFalse(result)
+
+    def test_skip_when_all_tensors_empty(self) -> None:
+        current_feature_idxs = [0]
+        feature_idx_to_tensor_idx = {0: [0]}
+        formatted_inputs = (torch.tensor([]),)
+
+        with unittest.mock.patch(
+            "captum.attr._core.feature_ablation.logger"
+        ) as mock_logger:
+            result = _should_skip_inputs_and_warn(
+                current_feature_idxs,
+                feature_idx_to_tensor_idx,
+                formatted_inputs,
+            )
+
+        self.assertTrue(result)
+        mock_logger.info.assert_called_once()
+
+    def test_no_skip_when_tensors_not_empty(self) -> None:
+        current_feature_idxs = [0, 1]
+        feature_idx_to_tensor_idx = {0: [0], 1: [0]}
+        formatted_inputs = (torch.tensor([[1.0, 2.0], [3.0, 4.0]]),)
+
+        result = _should_skip_inputs_and_warn(
+            current_feature_idxs,
+            feature_idx_to_tensor_idx,
+            formatted_inputs,
+        )
+
+        self.assertFalse(result)
 
 
 if __name__ == "__main__":

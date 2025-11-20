@@ -219,6 +219,52 @@ def check_output_shape_valid(
         )
 
 
+def _should_skip_inputs_and_warn(
+    current_feature_idxs: List[int],
+    feature_idx_to_tensor_idx: Dict[int, List[int]],
+    formatted_inputs: Tuple[Tensor, ...],
+    min_examples_per_batch_grouped: Optional[int] = None,
+) -> bool:
+    """
+    Determines whether a feature group should be skipped during attribution computation.
+
+    This method checks two conditions that would cause a feature group to be skipped:
+    1. If min_examples_per_batch_grouped is specified and any input tensor in the
+       feature group has a batch size (0th dimension) smaller than this threshold.
+    2. If all input tensors in the feature group are empty (contain no elements).
+
+    Returns:
+        bool: True if the feature group should be skipped, False otherwise.
+    """
+    should_skip = False
+    all_empty = True
+    tensor_idx_list = []
+    for feature_idx in current_feature_idxs:
+        tensor_idx_list += feature_idx_to_tensor_idx[feature_idx]
+    for tensor_idx in set(tensor_idx_list):
+        if all_empty and torch.numel(formatted_inputs[tensor_idx]) != 0:
+            all_empty = False
+        if min_examples_per_batch_grouped is not None and (
+            formatted_inputs[tensor_idx].shape[0] < min_examples_per_batch_grouped
+        ):
+            should_skip = True
+            break
+    if should_skip:
+        logger.warning(
+            f"Skipping feature group {current_feature_idxs} since it contains "
+            f"at least one input tensor with 0th dim less than "
+            f"{min_examples_per_batch_grouped}"
+        )
+        return True
+    if all_empty:
+        logger.info(
+            f"Skipping feature group {current_feature_idxs} since all "
+            f"input tensors are empty"
+        )
+        return True
+    return False
+
+
 class FeatureAblation(PerturbationAttribution):
     """
     A perturbation based approach to computing attribution, involving
@@ -688,34 +734,12 @@ class FeatureAblation(PerturbationAttribution):
         feature_idx_to_tensor_idx: Dict[int, List[int]],
         formatted_inputs: Tuple[Tensor, ...],
     ) -> bool:
-        should_skip = False
-        all_empty = True
-        tensor_idx_list = []
-        for feature_idx in current_feature_idxs:
-            tensor_idx_list += feature_idx_to_tensor_idx[feature_idx]
-        for tensor_idx in set(tensor_idx_list):
-            if all_empty and torch.numel(formatted_inputs[tensor_idx]) != 0:
-                all_empty = False
-            if self._min_examples_per_batch_grouped is not None and (
-                formatted_inputs[tensor_idx].shape[0]
-                < cast(int, self._min_examples_per_batch_grouped)
-            ):
-                should_skip = True
-                break
-        if should_skip:
-            logger.warning(
-                f"Skipping feature group {current_feature_idxs} since it contains "
-                f"at least one input tensor with 0th dim less than "
-                f"{self._min_examples_per_batch_grouped}"
-            )
-            return True
-        if all_empty:
-            logger.info(
-                f"Skipping feature group {current_feature_idxs} since all "
-                f"input tensors are empty"
-            )
-            return True
-        return False
+        return _should_skip_inputs_and_warn(
+            current_feature_idxs=current_feature_idxs,
+            feature_idx_to_tensor_idx=feature_idx_to_tensor_idx,
+            formatted_inputs=formatted_inputs,
+            min_examples_per_batch_grouped=self._min_examples_per_batch_grouped,
+        )
 
     def _construct_ablated_input_across_tensors(
         self,
