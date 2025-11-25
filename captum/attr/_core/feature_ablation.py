@@ -4,19 +4,7 @@
 
 import logging
 import math
-from typing import (
-    Any,
-    Callable,
-    cast,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Protocol,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import Any, Callable, cast, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 from captum._utils.common import (
@@ -31,7 +19,7 @@ from captum._utils.common import (
     _run_forward,
 )
 from captum._utils.exceptions import FeatureAblationFutureError
-from captum._utils.progress import progress
+from captum._utils.progress import NullProgress, progress, Progress
 from captum._utils.typing import BaselineType, TargetType, TensorOrTupleOfTensorsGeneric
 from captum.attr._utils.attribution import PerturbationAttribution
 from captum.attr._utils.common import (
@@ -43,25 +31,7 @@ from torch import dtype, Tensor
 from torch.futures import collect_all, Future
 
 
-IterableType = TypeVar("IterableType")
-
 logger: logging.Logger = logging.getLogger(__name__)
-
-
-class Progress(Protocol):
-    def update(self, n: int = 1) -> Optional[bool]:
-        """TQDM Update  method signature."""
-
-    def close(self) -> None:
-        """TQDM Close method signature."""
-
-
-class NullProgress:
-    def update(self, n: int = 1) -> Optional[bool]:
-        return None
-
-    def close(self) -> None:
-        return None
 
 
 def _parse_forward_out(forward_output: object) -> Tensor:
