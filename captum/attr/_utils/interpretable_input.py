@@ -572,7 +572,7 @@ class MMImageMaskInput(InterpretableInput):
     n_itp_features: int
     original_model_inputs: Any
     mask_id_to_idx: Dict[int, int]
-    values: List[str] = []  # no use for now
+    values: List[str]
 
     def __init__(
         self,
@@ -605,6 +605,10 @@ class MMImageMaskInput(InterpretableInput):
         self.mask_id_to_idx = {int(mid): i for i, mid in enumerate(mask_ids)}
 
         self.original_model_inputs = processor_fn(image)
+
+        # temporarily for compatibility with AttributionResult
+        # which use the values for plot legends
+        self.values = [f"image_feature_{mid}" for mid in mask_ids]
 
     def to_tensor(self) -> Tensor:
         return torch.tensor([[1.0] * self.n_itp_features])
