@@ -592,6 +592,12 @@ class MMImageMaskInput(InterpretableInput):
             self.n_itp_features = 1
             self.mask_id_to_idx = {}
         else:
+            # Validate that mask size matches image size
+            image_shape = (image.size[1], image.size[0])  # (height, width)
+            assert (
+                mask.shape == image_shape
+            ), f"mask shape {mask.shape} must match image shape {image_shape}"
+
             mask_ids = torch.unique(mask)
             self.n_itp_features = len(mask_ids)
             self.mask_id_to_idx = {int(mid): i for i, mid in enumerate(mask_ids)}
