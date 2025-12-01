@@ -2,7 +2,7 @@
 
 # pyre-unsafe
 
-from typing import Any, Dict, List, Literal, Optional, overload, Union
+from typing import Dict, List, Literal, Optional, overload, Union
 
 import numpy as np
 import PIL.Image
@@ -260,9 +260,14 @@ class TestMMImageMaskInput(BaseTest):
         )
 
         # Assert: verify n_itp_features is 1 when no mask provided
+        # When mask is None, a dummy mask with all zeros is created
         self.assertEqual(mm_input.n_itp_features, 1)
-        self.assertEqual(len(mm_input.mask_id_to_idx), 0)
-        self.assertIsNone(mm_input.mask)
+        self.assertEqual(mm_input.mask_id_to_idx, {0: 0})
+        self.assertIsNotNone(mm_input.mask)
+        # Verify dummy mask has all zeros
+        self.assertTrue(torch.all(mm_input.mask == 0))
+        # Verify dummy mask shape matches image size (height, width)
+        self.assertEqual(mm_input.mask.shape, (image.size[1], image.size[0]))
 
     def test_init_with_mask(self) -> None:
         # Setup: create test image and mask with 2 segments

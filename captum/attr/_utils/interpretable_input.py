@@ -537,20 +537,20 @@ class MMImageMaskInput(InterpretableInput):
         >>>
         >>>    prompt = processor.apply_chat_template(
         >>>        messages, add_generation_prompt=True
-        >>>)
+        >>>    )
         >>>
         >>>    return processor(
         >>>        text=prompt,
         >>>        images=image,
         >>>        return_tensors="pt",
         >>>    ).to(model.device)
-
+        >>>
         >>> image = Image.open("test.jpg")
-
+        >>>
         >>> # Split horizontally: left half = 0, right half = 1
         >>> mask = torch.zeros(image.size[::-1], dtype=torch.int32)
         >>> mask[:, image.size[0] // 2:] = 1
-
+        >>>
         >>> image_mask_inp = MMImageMaskInput(
         >>>     processor_fn=processor_fn,
         >>>     image=image,
@@ -567,7 +567,7 @@ class MMImageMaskInput(InterpretableInput):
 
     processor_fn: Callable[[PIL.Image.Image], Any]
     image: PIL.Image.Image
-    mask: Optional[Tensor]
+    mask: Tensor
     baselines: Tuple[int, int, int]
     n_itp_features: int
     original_model_inputs: Any
@@ -585,12 +585,13 @@ class MMImageMaskInput(InterpretableInput):
 
         self.processor_fn = processor_fn
         self.image = image
-        self.mask = mask
         self.baselines = baselines
 
+        # Create a dummy mask if None is provided
         if mask is None:
-            self.n_itp_features = 1
-            self.mask_id_to_idx = {}
+            # Create a mask with all zeros (entire image as one segment)
+            image_shape = (image.size[1], image.size[0])  # (height, width)
+            mask = torch.zeros(image_shape, dtype=torch.int32)
         else:
             # Validate that mask size matches image size
             image_shape = (image.size[1], image.size[0])  # (height, width)
@@ -598,9 +599,10 @@ class MMImageMaskInput(InterpretableInput):
                 mask.shape == image_shape
             ), f"mask shape {mask.shape} must match image shape {image_shape}"
 
-            mask_ids = torch.unique(mask)
-            self.n_itp_features = len(mask_ids)
-            self.mask_id_to_idx = {int(mid): i for i, mid in enumerate(mask_ids)}
+        self.mask = mask
+        mask_ids = torch.unique(mask)
+        self.n_itp_features = len(mask_ids)
+        self.mask_id_to_idx = {int(mid): i for i, mid in enumerate(mask_ids)}
 
         self.original_model_inputs = processor_fn(image)
 
@@ -613,14 +615,10 @@ class MMImageMaskInput(InterpretableInput):
 
         img_array = np.array(self.image)
 
-        if self.mask is None:
-            if perturbed_tensor[0][0] == 0:
-                img_array[:, :] = self.baselines
-        else:
-            for mask_id, itp_idx in self.mask_id_to_idx.items():
-                if perturbed_tensor[0][itp_idx] == 0:
-                    mask_positions = self.mask == mask_id
-                    img_array[mask_positions] = self.baselines
+        for mask_id, itp_idx in self.mask_id_to_idx.items():
+            if perturbed_tensor[0][itp_idx] == 0:
+                mask_positions = self.mask == mask_id
+                img_array[mask_positions] = self.baselines
 
         perturbed_image = PIL.Image.fromarray(img_array.astype("uint8"))
 
@@ -629,18 +627,11 @@ class MMImageMaskInput(InterpretableInput):
     def format_attr(self, itp_attr: Tensor) -> Tensor:
         device = itp_attr.device
 
-        if self.mask is None:
-            # When mask is None, treat entire image as one segment
-            # Create a uniform mask of all zeros to broadcast the single attribution
-            img_array = np.array(self.image)
-            image_shape = img_array.shape[:2]  # (height, width)
-            formatted_mask = torch.zeros(image_shape, dtype=torch.long, device=device)
-        else:
-            # Map mask IDs to continuous indices
-            image_shape = self.mask.shape
-            formatted_mask = torch.zeros_like(self.mask, device=device)
-            for mask_id, itp_idx in self.mask_id_to_idx.items():
-                formatted_mask[self.mask == mask_id] = itp_idx
+        # Map mask IDs to continuous indices
+        image_shape = self.mask.shape
+        formatted_mask = torch.zeros_like(self.mask, device=device)
+        for mask_id, itp_idx in self.mask_id_to_idx.items():
+            formatted_mask[self.mask == mask_id] = itp_idx
 
         formatted_attr = _scatter_itp_attr_by_mask(
             itp_attr,
