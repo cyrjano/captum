@@ -515,7 +515,7 @@ class MMImageMaskInput(InterpretableInput):
                 and end with same attributions. When mask is None, the entire image is
                 considered as one interpretable feature.
                 Default: None
-        baselines (Tuple[int, int, int], optional): the baseline RGB value for
+        baseline (Tuple[int, int, int], optional): the baseline RGB value for
                 the “absent” image pixels.
                 Default: (255, 255, 255)
 
@@ -568,7 +568,7 @@ class MMImageMaskInput(InterpretableInput):
     processor_fn: Callable[[PIL.Image.Image], Any]
     image: PIL.Image.Image
     mask: Tensor
-    baselines: Tuple[int, int, int]
+    baseline: Tuple[int, int, int]
     n_itp_features: int
     original_model_inputs: Any
     mask_id_to_idx: Dict[int, int]
@@ -579,13 +579,13 @@ class MMImageMaskInput(InterpretableInput):
         processor_fn: Callable[[PIL.Image.Image], Any],
         image: PIL.Image.Image,
         mask: Optional[Tensor] = None,
-        baselines: Tuple[int, int, int] = (255, 255, 255),
+        baseline: Tuple[int, int, int] = (255, 255, 255),
     ) -> None:
         super().__init__()
 
         self.processor_fn = processor_fn
         self.image = image
-        self.baselines = baselines
+        self.baseline = baseline
 
         # Create a dummy mask if None is provided
         if mask is None:
@@ -622,7 +622,7 @@ class MMImageMaskInput(InterpretableInput):
         for mask_id, itp_idx in self.mask_id_to_idx.items():
             if perturbed_tensor[0][itp_idx] == 0:
                 mask_positions = self.mask == mask_id
-                img_array[mask_positions] = self.baselines
+                img_array[mask_positions] = self.baseline
 
         perturbed_image = PIL.Image.fromarray(img_array.astype("uint8"))
 

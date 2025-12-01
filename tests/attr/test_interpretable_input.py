@@ -367,7 +367,7 @@ class TestMMImageMaskInput(BaseTest):
         mm_input = MMImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
-            baselines=(255, 255, 255),  # white baseline
+            baseline=(255, 255, 255),  # white baseline
         )
 
         # Execute: perturb with feature present (value 1)
@@ -386,7 +386,7 @@ class TestMMImageMaskInput(BaseTest):
         mm_input = MMImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
-            baselines=(255, 255, 255),  # white baseline
+            baseline=(255, 255, 255),  # white baseline
         )
 
         # Execute: perturb with feature absent (value 0)
@@ -411,7 +411,7 @@ class TestMMImageMaskInput(BaseTest):
             processor_fn=self._simple_processor,
             image=image,
             mask=mask,
-            baselines=(255, 255, 255),  # white baseline
+            baseline=(255, 255, 255),  # white baseline
         )
 
         # Execute: perturb to keep left segment (0) but remove right segment (1)
@@ -432,7 +432,7 @@ class TestMMImageMaskInput(BaseTest):
         mm_input = MMImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
-            baselines=(0, 128, 255),  # Custom blue-ish baseline
+            baseline=(0, 128, 255),  # Custom blue-ish baseline
         )
 
         # Execute: perturb to remove feature
