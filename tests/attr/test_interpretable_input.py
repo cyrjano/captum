@@ -9,7 +9,7 @@ import PIL.Image
 import torch
 from captum._utils.typing import BatchEncodingType
 from captum.attr._utils.interpretable_input import (
-    MMImageMaskInput,
+    ImageMaskInput,
     TextTemplateInput,
     TextTokenInput,
 )
@@ -236,7 +236,7 @@ class TestTextTokenInput(BaseTest):
         )
 
 
-class TestMMImageMaskInput(BaseTest):
+class TestImageMaskInput(BaseTest):
     def _create_test_image(
         self, width: int = 10, height: int = 10, color: tuple = (255, 0, 0)
     ) -> PIL.Image.Image:
@@ -253,8 +253,8 @@ class TestMMImageMaskInput(BaseTest):
         # Setup: create test image and processor
         image = self._create_test_image()
 
-        # Execute: create MMImageMaskInput without mask
-        mm_input = MMImageMaskInput(
+        # Execute: create ImageMaskInput without mask
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
         )
@@ -275,8 +275,8 @@ class TestMMImageMaskInput(BaseTest):
         mask = torch.zeros((10, 10), dtype=torch.int32)
         mask[:, 5:] = 1  # Split horizontally into 2 segments
 
-        # Execute: create MMImageMaskInput with mask
-        mm_input = MMImageMaskInput(
+        # Execute: create ImageMaskInput with mask
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
             mask=mask,
@@ -295,8 +295,8 @@ class TestMMImageMaskInput(BaseTest):
         mask[:, 5:10] = 5
         mask[:, 10:] = 10
 
-        # Execute: create MMImageMaskInput
-        mm_input = MMImageMaskInput(
+        # Execute: create ImageMaskInput
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
             mask=mask,
@@ -310,9 +310,9 @@ class TestMMImageMaskInput(BaseTest):
         self.assertEqual(mapped_indices, {0, 1, 2})
 
     def test_to_tensor_without_mask(self) -> None:
-        # Setup: create MMImageMaskInput without mask
+        # Setup: create ImageMaskInput without mask
         image = self._create_test_image()
-        mm_input = MMImageMaskInput(
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
         )
@@ -325,13 +325,13 @@ class TestMMImageMaskInput(BaseTest):
         assertTensorAlmostEqual(self, result, expected)
 
     def test_to_tensor_with_mask(self) -> None:
-        # Setup: create MMImageMaskInput with 3 segments
+        # Setup: create ImageMaskInput with 3 segments
         image = self._create_test_image(width=15)
         mask = torch.zeros((10, 15), dtype=torch.int32)
         mask[:, 5:10] = 1
         mask[:, 10:] = 2
 
-        mm_input = MMImageMaskInput(
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
             mask=mask,
@@ -345,9 +345,9 @@ class TestMMImageMaskInput(BaseTest):
         assertTensorAlmostEqual(self, result, expected)
 
     def test_to_model_input_without_perturbation(self) -> None:
-        # Setup: create MMImageMaskInput
+        # Setup: create ImageMaskInput
         image = self._create_test_image()
-        mm_input = MMImageMaskInput(
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
         )
@@ -364,7 +364,7 @@ class TestMMImageMaskInput(BaseTest):
     def test_to_model_input_with_perturbation_no_mask_present(self) -> None:
         # Setup: create red image without mask
         image = self._create_test_image(color=(255, 0, 0))
-        mm_input = MMImageMaskInput(
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
             baseline=(255, 255, 255),  # white baseline
@@ -383,7 +383,7 @@ class TestMMImageMaskInput(BaseTest):
     def test_to_model_input_with_perturbation_no_mask_absent(self) -> None:
         # Setup: create red image without mask
         image = self._create_test_image(color=(255, 0, 0))
-        mm_input = MMImageMaskInput(
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
             baseline=(255, 255, 255),  # white baseline
@@ -407,7 +407,7 @@ class TestMMImageMaskInput(BaseTest):
         mask = torch.zeros((10, 10), dtype=torch.int32)
         mask[:, 5:] = 1  # Right half is segment 1
 
-        mm_input = MMImageMaskInput(
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
             mask=mask,
@@ -429,7 +429,7 @@ class TestMMImageMaskInput(BaseTest):
     def test_to_model_input_with_custom_baselines(self) -> None:
         # Setup: create image with custom baseline color
         image = self._create_test_image(color=(255, 0, 0))
-        mm_input = MMImageMaskInput(
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
             baseline=(0, 128, 255),  # Custom blue-ish baseline
@@ -446,9 +446,9 @@ class TestMMImageMaskInput(BaseTest):
         self.assertTrue(np.all(img_array[:, :, 2] == 255))
 
     def test_format_attr_without_mask(self) -> None:
-        # Setup: create MMImageMaskInput without mask
+        # Setup: create ImageMaskInput without mask
         image = self._create_test_image(width=5, height=5)
-        mm_input = MMImageMaskInput(
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
         )
@@ -462,12 +462,12 @@ class TestMMImageMaskInput(BaseTest):
         self.assertTrue(torch.all(result == 0.5))
 
     def test_format_attr_with_mask(self) -> None:
-        # Setup: create MMImageMaskInput with 2 segments
+        # Setup: create ImageMaskInput with 2 segments
         image = self._create_test_image(width=10, height=5)
         mask = torch.zeros((5, 10), dtype=torch.int32)
         mask[:, 5:] = 1  # Split horizontally
 
-        mm_input = MMImageMaskInput(
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
             mask=mask,
@@ -493,7 +493,7 @@ class TestMMImageMaskInput(BaseTest):
         mask[:, 5:10] = 10
         mask[:, 10:] = 20
 
-        mm_input = MMImageMaskInput(
+        mm_input = ImageMaskInput(
             processor_fn=self._simple_processor,
             image=image,
             mask=mask,

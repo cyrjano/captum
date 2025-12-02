@@ -488,24 +488,21 @@ class TextTokenInput(InterpretableInput):
         return itp_attr
 
 
-class MMImageMaskInput(InterpretableInput):
+class ImageMaskInput(InterpretableInput):
     """
-    MMImageMaskInput is an implementation of InterpretableInput for the image in
-    multi-modality inputs, whose
+    ImageMaskInput is an implementation of InterpretableInput for the image, whose
     interpretable features are certain image segments (e.g., groups of pixels).
-    It takes the image, its corresponding segmentation masks, and
-    a processor function which converts the image into the model inputs.
-    Its input format to the model will be the tokenized multi-modality tensors
-    (the output of the processor function),
-    while its interpretable representation will be a binary tensor of the number of
+    It takes an image and its corresponding segmentation masks .
+    Its interpretable representation will be a binary tensor of the number of
     the image segment features whose values indicates if the image segment is
-    “presence” or “absence”.
+    “presence” or “absence”. By default, its model input will be the masked out image.
+    But it also accepts an optional processor function, which converts the image into
+    the model inputs if the model does not directly consume images.
+    A typical example is MM LLM, which requires the image to be processed with
+    other texts into the tokenized multi-modality tensors.
 
     Args:
 
-        processor_fn (Callable): the multi-modality processor function which take
-                an input image to encode with any text prompt and outputs the inputs
-                for the model
         image (PIL.Image.Image): an opened PIL image file.
         mask (Tensor, optional): the mask to group the image pixels into
                 segment features. It must be in the same shape as the image size
@@ -518,6 +515,10 @@ class MMImageMaskInput(InterpretableInput):
         baseline (Tuple[int, int, int], optional): the baseline RGB value for
                 the “absent” image pixels.
                 Default: (255, 255, 255)
+        processor_fn (Callable, optional): function convert the image into
+                the model input. A common example is the multi-modality LLM processor
+                function which take an input image to encode with any text prompt
+                and outputs the inputs for the LLM
 
     Examples::
 
@@ -551,10 +552,10 @@ class MMImageMaskInput(InterpretableInput):
         >>> mask = torch.zeros(image.size[::-1], dtype=torch.int32)
         >>> mask[:, image.size[0] // 2:] = 1
         >>>
-        >>> image_mask_inp = MMImageMaskInput(
-        >>>     processor_fn=processor_fn,
+        >>> image_mask_inp = ImageMaskInput(
         >>>     image=image,
         >>>     mask=mask,
+        >>>     processor_fn=processor_fn,
         >>> )
         >>>
         >>> text_inp.to_tensor()
@@ -565,10 +566,10 @@ class MMImageMaskInput(InterpretableInput):
 
     """
 
-    processor_fn: Callable[[PIL.Image.Image], Any]
     image: PIL.Image.Image
     mask: Tensor
     baseline: Tuple[int, int, int]
+    processor_fn: Callable[[PIL.Image.Image], Any]
     n_itp_features: int
     original_model_inputs: Any
     mask_id_to_idx: Dict[int, int]
@@ -576,10 +577,10 @@ class MMImageMaskInput(InterpretableInput):
 
     def __init__(
         self,
-        processor_fn: Callable[[PIL.Image.Image], Any],
         image: PIL.Image.Image,
         mask: Optional[Tensor] = None,
         baseline: Tuple[int, int, int] = (255, 255, 255),
+        processor_fn: Callable[[PIL.Image.Image], Any] = lambda x: x,
     ) -> None:
         super().__init__()
 
