@@ -55,6 +55,11 @@ def _scatter_itp_attr_by_mask(
     else:
         expanded_itp_attr = itp_attr
 
+    # gather index must be long
+    # may support int32 soon https://github.com/pytorch/pytorch/pull/151822
+    if expanded_feature_indices.dtype != torch.long:
+        expanded_feature_indices = expanded_feature_indices.long()
+
     # gather from (*output_dims, *inp.shape[1:-1], n_itp_features)
     attr = torch.gather(expanded_itp_attr, -1, expanded_feature_indices)
 
