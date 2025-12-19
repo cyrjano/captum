@@ -64,6 +64,7 @@ from captum.attr._utils.attribution import (
 from captum.attr._utils.baselines import ProductBaselines
 from captum.attr._utils.class_summarizer import ClassSummarizer
 from captum.attr._utils.interpretable_input import (
+    ImageMaskInput,
     InterpretableInput,
     TextTemplateInput,
     TextTokenInput,
@@ -136,6 +137,7 @@ __all__ = [
     "NoiseTunnel",
     "ProductBaselines",
     "GradientShap",
+    "ImageMaskInput",
     "InterpretableEmbeddingBase",
     "TextTemplateInput",
     "TextTokenInput",
