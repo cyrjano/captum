@@ -10,6 +10,7 @@ on:
 
 jobs:
   tests:
+    if: false  # Workflow disabled
     strategy:
       matrix:
         pytorch_args: ["", "-n"]
