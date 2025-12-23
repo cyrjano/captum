@@ -504,9 +504,14 @@ class BaseLLMAttribution(Attribution, ABC):
             assert gen_args is None, "gen_args must be None when target is given"
 
             if isinstance(target, str):
-                encoded = self.tokenizer.encode(target)
-                # skip the first special token <sos>
-                target_tokens = torch.tensor(encoded[1:])
+                # skip the leading special token bos
+                # but add_special_tokens may also skip tailing tokens like eos
+                # will it be a problem to the reliability of attr scores?
+                # in Llama4, <|eot|> is appended even with add_special_tokens=False
+                # this api also limits us to hf
+                # https://huggingface.co/docs/transformers/en/main_classes/tokenizer#transformers.PythonBackend.encode.add_special_tokens
+                encoded = self.tokenizer.encode(target, add_special_tokens=False)
+                target_tokens = torch.tensor(encoded)
             elif isinstance(target, torch.Tensor):
                 target_tokens = target
             else:

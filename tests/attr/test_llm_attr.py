@@ -489,17 +489,17 @@ class TestLLMAttr(BaseTest):
         inp = TextTokenInput("a b c", tokenizer)
         res = llm_fa.attribute(
             inp,
-            torch.tensor(tokenizer.encode("m n o p q")),
+            torch.tensor(tokenizer.encode("m n o p q", add_special_tokens=False)),
         )
 
-        # 6 output tokens, 4 input tokens including sos
+        # 5 output tokens, 4 input tokens including sos
         self.assertEqual(res.seq_attr.shape, (4,))
         assert res.token_attr is not None
         self.assertIsNotNone(res.token_attr)
         token_attr = res.token_attr
-        self.assertEqual(token_attr.shape, (6, 4))
+        self.assertEqual(token_attr.shape, (5, 4))
         self.assertEqual(res.input_tokens, ["<sos>", "a", "b", "c"])
-        self.assertEqual(res.output_tokens, ["<sos>", "m", "n", "o", "p", "q"])
+        self.assertEqual(res.output_tokens, ["m", "n", "o", "p", "q"])
 
 
 @parameterized_class(
@@ -653,18 +653,18 @@ class TestLLMGradAttr(BaseTest):
         inp = TextTokenInput("a b c", tokenizer)
         res = llm_attr.attribute(
             inp,
-            torch.tensor(tokenizer.encode("m n o p q")),
+            torch.tensor(tokenizer.encode("m n o p q", add_special_tokens=False)),
             **attr_kws,
         )
 
-        # 6 output tokens, 4 input tokens including sos
+        # 5 output tokens, 4 input tokens including sos
         self.assertEqual(res.seq_attr.shape, (4,))
         assert res.token_attr is not None
         self.assertIsNotNone(res.token_attr)
         token_attr = res.token_attr
-        self.assertEqual(token_attr.shape, (6, 4))
+        self.assertEqual(token_attr.shape, (5, 4))
         self.assertEqual(res.input_tokens, ["<sos>", "a", "b", "c"])
-        self.assertEqual(res.output_tokens, ["<sos>", "m", "n", "o", "p", "q"])
+        self.assertEqual(res.output_tokens, ["m", "n", "o", "p", "q"])
 
 
 class TestVLLMProvider(BaseTest):
@@ -1355,14 +1355,14 @@ class TestRemoteLLMAttr(BaseTest):
         inp = TextTokenInput("a b c", tokenizer)
         res = remote_llm_fa.attribute(
             inp,
-            torch.tensor(tokenizer.encode("m n o p q")),
+            torch.tensor(tokenizer.encode("m n o p q", add_special_tokens=False)),
         )
 
-        # 6 output tokens, 4 input tokens including sos
+        # 5 output tokens, 4 input tokens including sos
         self.assertEqual(res.seq_attr.shape, (4,))
         assert res.token_attr is not None
         self.assertIsNotNone(res.token_attr)
         token_attr = res.token_attr
-        self.assertEqual(token_attr.shape, (6, 4))
+        self.assertEqual(token_attr.shape, (5, 4))
         self.assertEqual(res.input_tokens, ["<sos>", "a", "b", "c"])
-        self.assertEqual(res.output_tokens, ["<sos>", "m", "n", "o", "p", "q"])
+        self.assertEqual(res.output_tokens, ["m", "n", "o", "p", "q"])
