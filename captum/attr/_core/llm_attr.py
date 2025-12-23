@@ -480,7 +480,6 @@ class BaseLLMAttribution(Attribution, ABC):
         self,
         inp: InterpretableInput,
         target: Union[str, torch.Tensor, None] = None,
-        skip_tokens: Union[List[int], List[str], None] = None,
         gen_args: Optional[Dict[str, Any]] = None,
     ) -> Tensor:
         assert isinstance(
@@ -503,24 +502,13 @@ class BaseLLMAttribution(Attribution, ABC):
             target_tokens = output_tokens[0][model_inp.size(1) :]
         else:
             assert gen_args is None, "gen_args must be None when target is given"
-            # Encode skip tokens
-            if skip_tokens:
-                if isinstance(skip_tokens[0], str):
-                    skip_tokens = cast(List[str], skip_tokens)
-                    skip_tokens = self.tokenizer.convert_tokens_to_ids(skip_tokens)
-            else:
-                skip_tokens = []
-            skip_tokens = cast(List[int], skip_tokens)
 
             if isinstance(target, str):
                 encoded = self.tokenizer.encode(target)
-                target_tokens = torch.tensor(
-                    [token for token in encoded if token not in skip_tokens]
-                )
+                # skip the first special token <sos>
+                target_tokens = torch.tensor(encoded[1:])
             elif isinstance(target, torch.Tensor):
-                target_tokens = target[
-                    ~torch.isin(target, torch.tensor(skip_tokens, device=target.device))
-                ]
+                target_tokens = target
             else:
                 raise TypeError(
                     "target must either be str or Tensor, but the type of target is "
@@ -711,7 +699,6 @@ class LLMAttribution(BaseLLMAttribution):
         self,
         inp: InterpretableInput,
         target: Union[str, torch.Tensor, None] = None,
-        skip_tokens: Union[List[int], List[str], None] = None,
         num_trials: int = 1,
         gen_args: Optional[Dict[str, Any]] = None,
         use_cached_outputs: bool = True,
@@ -725,12 +712,6 @@ class LLMAttribution(BaseLLMAttribution):
             target (str or Tensor, optional): target response with respect to
                     which attributions are computed. If None, it uses the model
                     to generate the target based on the input and gen_args.
-                    Default: None
-            skip_tokens (List[int] or List[str], optional): the tokens to skip in the
-                    the output's interpretable representation. Use this argument to
-                    define uninterested tokens, commonly like special tokens, e.g.,
-                    sos, and unk. It can be a list of strings of the tokens or a list
-                    of integers of the token ids.
                     Default: None
             num_trials (int, optional): number of trials to run. Return is the average
                     attributions over all the trials.
@@ -751,7 +732,6 @@ class LLMAttribution(BaseLLMAttribution):
         target_tokens = self._get_target_tokens(
             inp,
             target,
-            skip_tokens=skip_tokens,
             gen_args=gen_args,
         )
 
@@ -849,7 +829,6 @@ class LLMGradientAttribution(BaseLLMAttribution):
         self,
         inp: InterpretableInput,
         target: Union[str, torch.Tensor, None] = None,
-        skip_tokens: Union[List[int], List[str], None] = None,
         gen_args: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> LLMAttributionResult:
@@ -859,12 +838,6 @@ class LLMGradientAttribution(BaseLLMAttribution):
             target (str or Tensor, optional): target response with respect to
                     which attributions are computed. If None, it uses the model
                     to generate the target based on the input and gen_args.
-                    Default: None
-            skip_tokens (List[int] or List[str], optional): the tokens to skip in the
-                    the output's interpretable representation. Use this argument to
-                    define uninterested tokens, commonly like special tokens, e.g.,
-                    sos, and unk. It can be a list of strings of the tokens or a list
-                    of integers of the token ids.
                     Default: None
             gen_args (dict, optional): arguments for generating the target. Only used if
                     target is not given. When None, the default arguments are used,
@@ -881,7 +854,6 @@ class LLMGradientAttribution(BaseLLMAttribution):
         target_tokens = self._get_target_tokens(
             inp,
             target,
-            skip_tokens=skip_tokens,
             gen_args=gen_args,
         )
 
@@ -1042,7 +1014,6 @@ class RemoteLLMAttribution(LLMAttribution):
         self,
         inp: InterpretableInput,
         target: Union[str, torch.Tensor, None] = None,
-        skip_tokens: Union[List[int], List[str], None] = None,
         gen_args: Optional[Dict[str, Any]] = None,
     ) -> Tensor:
         """
@@ -1071,9 +1042,7 @@ class RemoteLLMAttribution(LLMAttribution):
             )[0]
 
         else:
-            target_tokens = super()._get_target_tokens(
-                inp, target, skip_tokens, gen_args
-            )
+            target_tokens = super()._get_target_tokens(inp, target, gen_args)
 
         return target_tokens
 

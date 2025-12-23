@@ -312,7 +312,6 @@ class TestLLMAttr(BaseTest):
         res = llm_attr.attribute(
             inp,
             "m n o p q",
-            skip_tokens=[0],
             use_cached_outputs=self.use_cached_outputs,
             # pyre-fixme[6]: In call `LLMAttribution.attribute`,
             # for 4th positional argument, expected
@@ -374,7 +373,6 @@ class TestLLMAttr(BaseTest):
         res = llm_fa.attribute(
             inp,
             "m n o p q",
-            skip_tokens=[0],
             use_cached_outputs=self.use_cached_outputs,
         )
 
@@ -430,7 +428,6 @@ class TestLLMAttr(BaseTest):
         res = llm_fa.attribute(
             inp,
             "m n o p q",
-            skip_tokens=[0],
             use_cached_outputs=self.use_cached_outputs,
             **attr_kws,  # type: ignore
         )
@@ -478,11 +475,11 @@ class TestLLMAttr(BaseTest):
         assert res.token_attr is not None
         self.assertIsNotNone(res.token_attr)
         token_attr = res.token_attr
-        self.assertEqual(token_attr.shape, (6, 4))
+        self.assertEqual(token_attr.shape, (5, 4))
         self.assertEqual(res.input_tokens, ["<sos>", "a", "b", "c"])
-        self.assertEqual(res.output_tokens, ["<sos>", "m", "n", "o", "p", "q"])
+        self.assertEqual(res.output_tokens, ["m", "n", "o", "p", "q"])
 
-    def test_llm_attr_with_skip_tensor_target(self) -> None:
+    def test_llm_attr_with_tensor_target(self) -> None:
         llm = DummyLLM()
         llm.to(self.device)
         tokenizer = DummyTokenizer()
@@ -493,17 +490,16 @@ class TestLLMAttr(BaseTest):
         res = llm_fa.attribute(
             inp,
             torch.tensor(tokenizer.encode("m n o p q")),
-            skip_tokens=[0],
         )
 
-        # 5 output tokens, 4 input tokens including sos
+        # 6 output tokens, 4 input tokens including sos
         self.assertEqual(res.seq_attr.shape, (4,))
         assert res.token_attr is not None
         self.assertIsNotNone(res.token_attr)
         token_attr = res.token_attr
-        self.assertEqual(token_attr.shape, (5, 4))
+        self.assertEqual(token_attr.shape, (6, 4))
         self.assertEqual(res.input_tokens, ["<sos>", "a", "b", "c"])
-        self.assertEqual(res.output_tokens, ["m", "n", "o", "p", "q"])
+        self.assertEqual(res.output_tokens, ["<sos>", "m", "n", "o", "p", "q"])
 
 
 @parameterized_class(
@@ -536,7 +532,7 @@ class TestLLMGradAttr(BaseTest):
             )
 
         inp = TextTokenInput("a b c", tokenizer)
-        res = llm_attr.attribute(inp, "m n o p q", skip_tokens=[0], **attr_kws)
+        res = llm_attr.attribute(inp, "m n o p q", **attr_kws)
 
         # 5 output tokens, 4 input tokens including sos
         self.assertEqual(res.seq_attr.shape, (4,))
@@ -595,7 +591,7 @@ class TestLLMGradAttr(BaseTest):
             (LayerGradientShap, (torch.tensor([[1, 0, 1]]),)),
         ]
     )
-    def test_llm_attr_with_skip_tokens(
+    def test_llm_attr_with_skip_tokens_in_input(
         self, AttrClass: Type[GradientAttribution], baselines: Optional[Tuple[Tensor]]
     ) -> None:
         llm = DummyLLM()
@@ -611,9 +607,9 @@ class TestLLMGradAttr(BaseTest):
             )
 
         inp = TextTokenInput("a b c", tokenizer, skip_tokens=[0])
-        res = llm_attr.attribute(inp, "m n o p q", skip_tokens=[0], **attr_kws)
+        res = llm_attr.attribute(inp, "m n o p q", **attr_kws)
 
-        # 5 output tokens, 4 input tokens including sos
+        # 5 output tokens, 3 input tokens excluding sos
         self.assertEqual(res.seq_attr.shape, (3,))
         assert res.token_attr is not None
         self.assertIsNotNone(res.token_attr)
@@ -637,16 +633,16 @@ class TestLLMGradAttr(BaseTest):
         inp = TextTokenInput("a b c", tokenizer)
         res = llm_attr.attribute(inp, "m n o p q", **attr_kws)
 
-        # 6 output tokens, 4 input tokens including sos
+        # 5 output tokens, 4 input tokens including sos
         self.assertEqual(res.seq_attr.shape, (4,))
         assert res.token_attr is not None
         self.assertIsNotNone(res.token_attr)
         token_attr = res.token_attr
-        self.assertEqual(token_attr.shape, (6, 4))
+        self.assertEqual(token_attr.shape, (5, 4))
         self.assertEqual(res.input_tokens, ["<sos>", "a", "b", "c"])
-        self.assertEqual(res.output_tokens, ["<sos>", "m", "n", "o", "p", "q"])
+        self.assertEqual(res.output_tokens, ["m", "n", "o", "p", "q"])
 
-    def test_llm_attr_with_skip_tensor_target(self) -> None:
+    def test_llm_attr_with_tensor_target(self) -> None:
         llm = DummyLLM()
         llm.to(self.device)
         tokenizer = DummyTokenizer()
@@ -658,18 +654,17 @@ class TestLLMGradAttr(BaseTest):
         res = llm_attr.attribute(
             inp,
             torch.tensor(tokenizer.encode("m n o p q")),
-            skip_tokens=[0],
             **attr_kws,
         )
 
-        # 5 output tokens, 4 input tokens including sos
+        # 6 output tokens, 4 input tokens including sos
         self.assertEqual(res.seq_attr.shape, (4,))
         assert res.token_attr is not None
         self.assertIsNotNone(res.token_attr)
         token_attr = res.token_attr
-        self.assertEqual(token_attr.shape, (5, 4))
+        self.assertEqual(token_attr.shape, (6, 4))
         self.assertEqual(res.input_tokens, ["<sos>", "a", "b", "c"])
-        self.assertEqual(res.output_tokens, ["m", "n", "o", "p", "q"])
+        self.assertEqual(res.output_tokens, ["<sos>", "m", "n", "o", "p", "q"])
 
 
 class TestVLLMProvider(BaseTest):
@@ -1151,7 +1146,6 @@ class TestRemoteLLMAttr(BaseTest):
         res = remote_llm_attr.attribute(
             inp,
             "m n o p q",
-            skip_tokens=[0],
             # use_cached_outputs=self.use_cached_outputs,
             # pyre-fixme[6]: In call `LLMAttribution.attribute`,
             # for 4th positional argument, expected
@@ -1227,7 +1221,6 @@ class TestRemoteLLMAttr(BaseTest):
         res = remote_llm_attr.attribute(
             inp,
             "m n o p q",
-            skip_tokens=[0],
             # use_cached_outputs=self.use_cached_outputs,
         )
 
@@ -1289,7 +1282,6 @@ class TestRemoteLLMAttr(BaseTest):
         res = remote_llm_attr.attribute(
             inp,
             "m n o p q",
-            skip_tokens=[0],
             # use_cached_outputs=self.use_cached_outputs,
             **attr_kws,  # type: ignore
         )
@@ -1344,11 +1336,11 @@ class TestRemoteLLMAttr(BaseTest):
         assert res.token_attr is not None
         self.assertIsNotNone(res.token_attr)
         token_attr = res.token_attr
-        self.assertEqual(token_attr.shape, (6, 4))
+        self.assertEqual(token_attr.shape, (5, 4))
         self.assertEqual(res.input_tokens, ["<sos>", "a", "b", "c"])
-        self.assertEqual(res.output_tokens, ["<sos>", "m", "n", "o", "p", "q"])
+        self.assertEqual(res.output_tokens, ["m", "n", "o", "p", "q"])
 
-    def test_remote_llm_attr_with_skip_tensor_target(self) -> None:
+    def test_remote_llm_attr_with_tensor_target(self) -> None:
 
         tokenizer = DummyTokenizer()
         provider = DummyRemoteLLMProvider(deterministic_logprobs=True)
@@ -1364,14 +1356,13 @@ class TestRemoteLLMAttr(BaseTest):
         res = remote_llm_fa.attribute(
             inp,
             torch.tensor(tokenizer.encode("m n o p q")),
-            skip_tokens=[0],
         )
 
-        # 5 output tokens, 4 input tokens including sos
+        # 6 output tokens, 4 input tokens including sos
         self.assertEqual(res.seq_attr.shape, (4,))
         assert res.token_attr is not None
         self.assertIsNotNone(res.token_attr)
         token_attr = res.token_attr
-        self.assertEqual(token_attr.shape, (5, 4))
+        self.assertEqual(token_attr.shape, (6, 4))
         self.assertEqual(res.input_tokens, ["<sos>", "a", "b", "c"])
-        self.assertEqual(res.output_tokens, ["m", "n", "o", "p", "q"])
+        self.assertEqual(res.output_tokens, ["<sos>", "m", "n", "o", "p", "q"])
