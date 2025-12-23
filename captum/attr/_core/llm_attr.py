@@ -1,12 +1,10 @@
 # pyre-strict
 
 import warnings
-
 from abc import ABC
 from copy import copy
 from dataclasses import dataclass
 from textwrap import dedent, shorten
-
 from typing import (
     Any,
     Callable,
@@ -21,10 +19,8 @@ from typing import (
 )
 
 import matplotlib.colors as mcolors
-
 import numpy as np
 import numpy.typing as npt
-
 import torch
 from captum._utils.typing import TokenizerLike
 from captum.attr._core.feature_ablation import FeatureAblation
@@ -41,6 +37,7 @@ from captum.attr._utils.attribution import (
     PerturbationAttribution,
 )
 from captum.attr._utils.interpretable_input import (
+    ImageMaskInput,
     InterpretableInput,
     TextTemplateInput,
     TextTokenInput,
@@ -568,7 +565,7 @@ class LLMAttribution(BaseLLMAttribution):
         ShapleyValueSampling,
         ShapleyValues,
     )
-    SUPPORTED_INPUTS = (TextTemplateInput, TextTokenInput)
+    SUPPORTED_INPUTS = (TextTemplateInput, TextTokenInput, ImageMaskInput)
 
     def __init__(
         self,
