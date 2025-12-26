@@ -77,7 +77,6 @@ TEST_REQUIRES = [
 # captum may have some functionality that requires these packages, but they are
 # not required for the core functionality of captum.
 # These packages should be lazily imported.
-# Tests depending on these packages should be skippable
 OPTIONAL_REQUIRES = [
     "openai",  # remote
     "scikit-learn",
@@ -85,8 +84,7 @@ OPTIONAL_REQUIRES = [
 ]
 
 DEV_REQUIRES = (
-    TUTORIALS_REQUIRES
-    + TEST_REQUIRES
+    TEST_REQUIRES
     + OPTIONAL_REQUIRES
     + [
         "sphinx<8.2.0",
