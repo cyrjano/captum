@@ -230,7 +230,7 @@ class TestArnoldiInfluence(BaseTest):
                         "max",
                     )
 
-    # TODO: for some unknow reason, this test and the test below does not work
+    # TODO: for some unknown reason, this test and the test below does not work
     # on `cuda_data_parallel` setting. We need to investigate why.
     # Use a local version of setting list for these two tests for now
     # since we have changed the default setting list to includes all options.
