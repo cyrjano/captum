@@ -24,44 +24,40 @@ class DynamicCacheLike(CacheLike, Protocol):
     ) -> "DynamicCacheLike": ...
 
 
+# Minimum required transformers version.
+# Starting from v4.43.0:
+# - Cache and DynamicCache are available in transformers.cache_utils
+# - GenerationMixin._update_model_kwargs_for_generation requires "cache_position"
+#   as a mandatory argument (introduced in v4.39.0, made mandatory in v4.43.0)
+# - "use_cache" argument is supported (introduced in v4.41.0, optional w/ default True)
+# Older versions lack these cache utilities or have inconsistent APIs, making them
+# incompatible with our caching logic.
+_MIN_TRANSFORMERS_VERSION = Version("4.43.0")
+
 transformers_installed: bool
+_transformers_version: Optional[Version]
 Cache: Optional[Type[CacheLike]]
 DynamicCache: Optional[Type[DynamicCacheLike]]
 
 try:
     import transformers  # noqa: F401  # type: ignore
+    from transformers.cache_utils import (  # noqa: F401  # type: ignore
+        Cache as _Cache,
+        DynamicCache as _DynamicCache,
+    )
 
+    _transformers_version = Version(transformers.__version__)
+    assert _transformers_version >= _MIN_TRANSFORMERS_VERSION, (
+        f"transformers version {transformers.__version__} is not supported. "
+        f"Please upgrade to version {_MIN_TRANSFORMERS_VERSION} or higher."
+    )
     transformers_installed = True
+    Cache = _Cache
+    DynamicCache = cast(Optional[Type[DynamicCacheLike]], _DynamicCache)
 except ImportError:
     transformers_installed = False
-
-if transformers_installed:
-    try:
-        from transformers.cache_utils import (  # noqa: F401  # type: ignore
-            Cache as _Cache,
-            DynamicCache as _DynamicCache,
-        )
-
-        Cache = _Cache
-        DynamicCache = cast(Optional[Type[DynamicCacheLike]], _DynamicCache)
-    except ImportError:
-        Cache = DynamicCache = None
-else:
-    Cache = DynamicCache = None
-
-# GenerationMixin._update_model_kwargs_for_generation
-# "cache_position" at v4.39.0 (only needed for models that support cache class)
-# "use_cache" at v4.41.0 (optional, default is True)
-# "cache_position" is mandatory at v4.43.0 ("use_cache" is still optional, default True)
-_transformers_version: Optional[Version]
-if transformers_installed:
-    _transformers_version = Version(transformers.__version__)
-else:
     _transformers_version = None
-
-_mandated_cache_version = Version("4.43.0")
-_use_cache_version = Version("4.41.0")
-_cache_position_version = Version("4.39.0")
+    Cache = DynamicCache = None
 
 
 def update_model_kwargs(
@@ -72,29 +68,22 @@ def update_model_kwargs(
 ) -> None:
     if not supports_caching(model):
         return
-    assert _transformers_version is not None
     if caching:
-        # Enable caching
-        if _transformers_version >= _cache_position_version:
-            cache_position = torch.arange(
-                input_ids.shape[1], dtype=torch.int64, device=input_ids.device
-            )
-            model_kwargs["cache_position"] = cache_position
-        # pyre-ignore[58]: Unsupported operand `>=` is not supported for operand types
-        # `Optional[Version]` and `Version`.
-        if _transformers_version >= _use_cache_version:
-            model_kwargs["use_cache"] = True
+        # Enable caching: cache_position and use_cache are both supported in >= 4.43.0
+        cache_position = torch.arange(
+            input_ids.shape[1], dtype=torch.int64, device=input_ids.device
+        )
+        model_kwargs["cache_position"] = cache_position
+        model_kwargs["use_cache"] = True
     else:
         # Disable caching
-        if _transformers_version >= _use_cache_version:
-            model_kwargs["use_cache"] = False
+        model_kwargs["use_cache"] = False
 
 
 def supports_caching(model: nn.Module) -> bool:
     if not transformers_installed:
         # Not a transformers model
         return False
-    # Cache may be optional or unsupported depending on model/version
     try:
         from transformers.generation.utils import GenerationMixin  # type: ignore
     except ImportError:
@@ -103,9 +92,5 @@ def supports_caching(model: nn.Module) -> bool:
         # Model isn't a GenerationMixin, we don't support additional caching logic
         # for it
         return False
-    assert _transformers_version is not None
-    if _transformers_version >= _mandated_cache_version:
-        # Cache is mandatory
-        return True
-    # Fallback on _supports_cache_class attribute
-    return getattr(model, "_supports_cache_class", False)  # type: ignore
+    # Cache is mandatory for all models in >= 4.43.0
+    return True
