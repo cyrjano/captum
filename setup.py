@@ -61,27 +61,37 @@ INSIGHTS_FILE_SUBDIRS = [
 
 TUTORIALS_REQUIRES = INSIGHTS_REQUIRES + ["torchtext", "torchvision"]
 
-TEST_REQUIRES = ["pytest", "pytest-cov", "parameterized", "flask", "flask-compress"]
+# TODO: review if all of them are still needed
+TEST_REQUIRES = [
+    "pytest",
+    "pytest-cov",
+    "parameterized",
+    "black",
+    "flake8",
+    "mypy>=0.760",
+    "pyre-check-nightly==0.0.101750936314",
+    "usort==1.0.2",
+    "ufmt",
+]
 
-REMOTE_REQUIRES = ["openai"]
+# captum may have some functionality that requires these packages, but they are
+# not required for the core functionality of captum.
+# These packages should be lazily imported.
+# Tests depending on these packages should be skippable
+OPTIONAL_REQUIRES = [
+    "openai",  # remote
+    "scikit-learn",
+    "annoy",  # influence
+]
 
 DEV_REQUIRES = (
     TUTORIALS_REQUIRES
     + TEST_REQUIRES
-    + REMOTE_REQUIRES
+    + OPTIONAL_REQUIRES
     + [
-        "black",
-        "flake8",
         "sphinx<8.2.0",
         "sphinx-autodoc-typehints",
         "sphinxcontrib-katex",
-        "mypy>=0.760",
-        "pyre-check-nightly==0.0.101750936314",
-        "usort==1.0.2",
-        "ufmt",
-        "scikit-learn",
-        "annoy",
-        "click<8.2.0",
     ]
 )
 
@@ -174,7 +184,6 @@ if __name__ == "__main__":
             "insights": INSIGHTS_REQUIRES,
             "test": TEST_REQUIRES,
             "tutorials": TUTORIALS_REQUIRES,
-            "remote": REMOTE_REQUIRES,
         },
         package_data={"captum": package_files},
         data_files=[
