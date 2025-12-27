@@ -605,14 +605,6 @@ class LLMAttribution(BaseLLMAttribution):
         use_cached_outputs: bool = False,
         _inspect_forward: Optional[Callable[[str, str, List[float]], None]] = None,
     ) -> Tensor:
-        # Lazily import transformers_typing to avoid importing transformers package if
-        # it isn't needed
-        from captum._utils.transformers_typing import (
-            Cache,
-            DynamicCache,
-            supports_caching,
-        )
-
         perturbed_input = self._format_model_input(inp.to_model_input(perturbed_tensor))
         init_model_inp = perturbed_input
 
@@ -641,17 +633,15 @@ class LLMAttribution(BaseLLMAttribution):
         for target_token in target_tokens:
             if use_cached_outputs:
                 if outputs is not None:
-                    # If applicable, convert past_key_values to DynamicCache for
-                    # transformers models
-                    if (
-                        Cache is not None
-                        and DynamicCache is not None
-                        and supports_caching(self.model)
-                        and not isinstance(outputs.past_key_values, Cache)
-                    ):
-                        outputs.past_key_values = DynamicCache.from_legacy_cache(
-                            outputs.past_key_values
-                        )
+                    # Lazily import to avoid importing transformers package
+                    # if it isn't needed
+                    from captum._utils.transformers_typing import (
+                        convert_legacy_cache_if_needed,
+                    )
+
+                    outputs.past_key_values = convert_legacy_cache_if_needed(
+                        outputs.past_key_values
+                    )
                     # nn.Module typing suggests non-base attributes are modules or
                     # tensors
                     _update_model_kwargs_for_generation = cast(
@@ -733,6 +723,11 @@ class LLMAttribution(BaseLLMAttribution):
                     {"max_new_tokens": 25, "do_sample": False,
                     "temperature": None, "top_p": None}
                     Defaults: None
+            use_cached_outputs (bool, optional): whether to use cached outputs when
+                    generating tokens in sequence. Only support huggingface
+                    GenerationMixin, since this functionality has to depend on the
+                    actual APIs of the model
+                    Defaults: True.
             **kwargs (Any): any extra keyword arguments passed to the call of the
                     underlying attribute function of the given attribution instance
 

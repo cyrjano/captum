@@ -2,12 +2,10 @@
 
 # pyre-strict
 
-from typing import cast, Optional, Protocol, Tuple, Type
+from typing import Any, cast, Optional, Protocol, Tuple, Type
 
 import torch
-
 from packaging.version import Version
-from torch import nn
 
 
 class CacheLike(Protocol):
@@ -60,17 +58,15 @@ except ImportError:
     Cache = DynamicCache = None
 
 
-def supports_caching(model: nn.Module) -> bool:
-    if not transformers_installed:
-        # Not a transformers model
-        return False
-    try:
-        from transformers.generation.utils import GenerationMixin  # type: ignore
-    except ImportError:
-        return False
-    if not isinstance(model, GenerationMixin):
-        # Model isn't a GenerationMixin, we don't support additional caching logic
-        # for it
-        return False
-    # Cache is mandatory for all models in >= 4.43.0
-    return True
+def convert_legacy_cache_if_needed(past_key_values: Any) -> CacheLike:
+    """
+    If applicable, convert past_key_values to DynamicCache for transformers models.
+    """
+    if (
+        Cache is not None
+        and DynamicCache is not None
+        # rough check if past_key_values is Tuple[Tuple[torch.Tensor]]
+        and isinstance(past_key_values, tuple)
+    ):
+        return DynamicCache.from_legacy_cache(past_key_values)
+    return past_key_values

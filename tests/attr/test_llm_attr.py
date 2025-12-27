@@ -5,13 +5,14 @@
 import copy
 
 from collections import UserDict
+from dataclasses import dataclass
+
 from typing import (
     Any,
     cast,
     Dict,
     List,
     Literal,
-    NamedTuple,
     Optional,
     overload,
     Tuple,
@@ -144,7 +145,10 @@ class DummyTokenizer:
         return result
 
 
-class Result(NamedTuple):
+# use dataclass for simplicity, the actual hf model output is an OrderedDict
+# https://github.com/huggingface/transformers/blob/main/src/transformers/utils/generic.py#L283
+@dataclass
+class Result:
     logits: Tensor
     past_key_values: Tensor
 
