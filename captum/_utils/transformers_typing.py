@@ -2,7 +2,7 @@
 
 # pyre-strict
 
-from typing import Any, cast, Dict, Optional, Protocol, Tuple, Type
+from typing import cast, Optional, Protocol, Tuple, Type
 
 import torch
 
@@ -58,26 +58,6 @@ except ImportError:
     transformers_installed = False
     _transformers_version = None
     Cache = DynamicCache = None
-
-
-def update_model_kwargs(
-    model_kwargs: Dict[str, Any],
-    model: nn.Module,
-    input_ids: torch.Tensor,
-    caching: bool,
-) -> None:
-    if not supports_caching(model):
-        return
-    if caching:
-        # Enable caching: cache_position and use_cache are both supported in >= 4.43.0
-        cache_position = torch.arange(
-            input_ids.shape[1], dtype=torch.int64, device=input_ids.device
-        )
-        model_kwargs["cache_position"] = cache_position
-        model_kwargs["use_cache"] = True
-    else:
-        # Disable caching
-        model_kwargs["use_cache"] = False
 
 
 def supports_caching(model: nn.Module) -> bool:

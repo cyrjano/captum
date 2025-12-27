@@ -611,24 +611,30 @@ class LLMAttribution(BaseLLMAttribution):
             Cache,
             DynamicCache,
             supports_caching,
-            update_model_kwargs,
         )
 
         perturbed_input = self._format_model_input(inp.to_model_input(perturbed_tensor))
         init_model_inp = perturbed_input
 
         model_inp = init_model_inp
+
+        # model's forward function kwargs modifications
+        # we assume the model should extends GenerationMixin
+        # need trace its generate fn to understand how to set args for model forward
+        # https://github.com/huggingface/transformers/blob/main/src/transformers/generation/utils.py#L2252
         attention_mask = torch.ones(
             [1, model_inp.shape[1]], dtype=torch.long, device=model_inp.device
         )
-        model_kwargs = {"attention_mask": attention_mask}
-        # If applicable, update model kwargs for transformers models
-        update_model_kwargs(
-            model_kwargs=model_kwargs,
-            model=self.model,
-            input_ids=model_inp,
-            caching=use_cached_outputs,
-        )
+        model_kwargs: dict[str, Any] = {"attention_mask": attention_mask}
+
+        if use_cached_outputs:
+            cache_position = torch.arange(
+                model_inp.shape[1], dtype=torch.int64, device=model_inp.device
+            )
+            model_kwargs["cache_position"] = cache_position
+            model_kwargs["use_cache"] = True
+        else:
+            model_kwargs["use_cache"] = False
 
         log_prob_list: List[Tensor] = []
         outputs = None
@@ -671,6 +677,7 @@ class LLMAttribution(BaseLLMAttribution):
                 )
                 model_kwargs["attention_mask"] = attention_mask
                 outputs = self.model.forward(model_inp, **model_kwargs)
+
             new_token_logits = outputs.logits[:, -1]
             log_probs = torch.nn.functional.log_softmax(new_token_logits, dim=1)
 
