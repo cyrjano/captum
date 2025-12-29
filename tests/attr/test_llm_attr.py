@@ -214,21 +214,24 @@ class DummyLLM(nn.Module):
         return new_kwargs
 
     def prepare_inputs_for_generation(
-        self, model_inp: Tensor, **model_kwargs: Any
+        self, input_ids: Tensor, **model_kwargs: Any
     ) -> Dict[str, Tensor]:
-        model_inp = model_inp.to(self.device)
+        # mock the api as hf
+        # https://github.com/huggingface/transformers/blob/main/src/transformers/generation/utils.py#L592
+
+        input_ids = input_ids.to(self.device)
         if "past_key_values" in model_kwargs:
             emb_len = model_kwargs["past_key_values"].shape[1]
             return {
-                "input_ids": model_inp[:, emb_len:],
+                "input_ids": input_ids[:, emb_len:],
                 "past_key_values": model_kwargs["past_key_values"],
             }
         if "attention_mask" in model_kwargs:
             return {
-                "input_ids": model_inp,
+                "input_ids": input_ids,
                 "attention_mask": model_kwargs["attention_mask"],
             }
-        return {"input_ids": model_inp}
+        return {"input_ids": input_ids}
 
     @property
     def device(self) -> torch.device:

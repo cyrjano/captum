@@ -2,6 +2,7 @@
 
 import warnings
 from abc import ABC
+from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass
 from textwrap import dedent, shorten
@@ -498,8 +499,9 @@ class BaseLLMAttribution(Attribution, ABC):
                 gen_args = DEFAULT_GEN_ARGS
 
             model_inp = self._format_model_input(inp.to_model_input())
-            output_tokens = generate_func(model_inp, **gen_args)
-            target_tokens = output_tokens[0][model_inp.size(1) :]
+            input_token_len = model_inp["input_ids"].size(1)
+            output_tokens = generate_func(**model_inp, **gen_args)
+            target_tokens = output_tokens[0][input_token_len:]
         else:
             assert gen_args is None, "gen_args must be None when target is given"
 
@@ -521,18 +523,30 @@ class BaseLLMAttribution(Attribution, ABC):
                 )
         return target_tokens
 
-    def _format_model_input(self, model_input: Union[str, Tensor]) -> Tensor:
+    def _format_model_input(
+        self, model_input: Union[str, Tensor, Mapping]
+    ) -> dict[str, Any]:
         """
-        Convert str to tokenized tensor
-        to make LLMAttribution work with model inputs of both
-        raw text and text token tensors
+        Modern LLMs usually expect a series of inputs, primarily including input_ids
+        This fun ensures the model input from InterpretableInput to be a dict-like
+        - convert str to tokenized tensor input_ids
+        - for tensor, assume it is input_ids. Wrap in a dict
+        - for other dict-like, assume they are processed correctly by any processor.
+          E.g., BatchFeature returned by transformers processor. Convert to dict
         """
         # return tensor(1, n_tokens)
         if isinstance(model_input, str):
-            return self.tokenizer.encode(model_input, return_tensors="pt").to(
-                self.device
-            )
-        return model_input.to(self.device)
+            model_input = self.tokenizer.encode(model_input, return_tensors="pt")
+
+        if isinstance(model_input, Tensor):
+            input_ids = model_input.to(self.device)
+            return {"input_ids": input_ids}
+
+        assert isinstance(
+            model_input, Mapping
+        ), f"Invalid model input. {type(model_input)}"
+
+        return {**model_input}
 
 
 class LLMAttribution(BaseLLMAttribution):
@@ -608,25 +622,26 @@ class LLMAttribution(BaseLLMAttribution):
         perturbed_input = self._format_model_input(inp.to_model_input(perturbed_tensor))
         init_model_inp = perturbed_input
 
-        model_inp = init_model_inp
+        model_inp = {**init_model_inp}
 
         # model's forward function kwargs modifications
         # we assume the model should extends GenerationMixin
         # need trace its generate fn to understand how to set args for model forward
         # https://github.com/huggingface/transformers/blob/main/src/transformers/generation/utils.py#L2252
-        attention_mask = torch.ones(
-            [1, model_inp.shape[1]], dtype=torch.long, device=model_inp.device
-        )
-        model_kwargs: dict[str, Any] = {"attention_mask": attention_mask}
+
+        input_ids = model_inp["input_ids"]
+        if "attention_mask" not in model_inp:
+            model_inp["attention_mask"] = torch.ones(
+                [1, input_ids.shape[1]], dtype=torch.long, device=input_ids.device
+            )
 
         if use_cached_outputs:
-            cache_position = torch.arange(
-                model_inp.shape[1], dtype=torch.int64, device=model_inp.device
+            model_inp["cache_position"] = torch.arange(
+                input_ids.shape[1], dtype=torch.int64, device=input_ids.device
             )
-            model_kwargs["cache_position"] = cache_position
-            model_kwargs["use_cache"] = True
+            model_inp["use_cache"] = True
         else:
-            model_kwargs["use_cache"] = False
+            model_inp["use_cache"] = False
 
         log_prob_list: List[Tensor] = []
         outputs = None
@@ -648,33 +663,38 @@ class LLMAttribution(BaseLLMAttribution):
                         Callable[..., Dict[str, object]],
                         self.model._update_model_kwargs_for_generation,
                     )
-                    model_kwargs = _update_model_kwargs_for_generation(  # type: ignore
-                        outputs, model_kwargs
+                    model_inp = _update_model_kwargs_for_generation(  # type: ignore
+                        outputs, model_inp
                     )
                 # nn.Module typing suggests non-base attributes are modules or tensors
                 prep_inputs_for_generation = cast(
                     Callable[..., Dict[str, object]],
                     self.model.prepare_inputs_for_generation,
                 )
-                model_inputs = prep_inputs_for_generation(  # type: ignore
-                    model_inp, **model_kwargs
-                )
+                model_inputs = prep_inputs_for_generation(**model_inp)  # type: ignore
                 outputs = self.model.forward(**model_inputs)
             else:
                 # Update attention mask to adapt to input size change
+                input_ids = model_inp["input_ids"]
                 attention_mask = torch.ones(
-                    [1, model_inp.shape[1]], dtype=torch.long, device=model_inp.device
+                    [1, model_inp["input_ids"].shape[1]],
+                    dtype=torch.long,
+                    device=input_ids.device,
                 )
-                model_kwargs["attention_mask"] = attention_mask
-                outputs = self.model.forward(model_inp, **model_kwargs)
+                model_inp["attention_mask"] = attention_mask
+                outputs = self.model.forward(**model_inp)
 
             new_token_logits = outputs.logits[:, -1]
             log_probs = torch.nn.functional.log_softmax(new_token_logits, dim=1)
 
             log_prob_list.append(log_probs[0][target_token].detach())
 
-            model_inp = torch.cat(
-                (model_inp, torch.tensor([[target_token]]).to(self.device)), dim=1
+            model_inp["input_ids"] = torch.cat(
+                (
+                    model_inp["input_ids"],
+                    torch.tensor([[target_token]]).to(self.device),
+                ),
+                dim=1,
             )
 
         total_log_prob = torch.sum(torch.stack(log_prob_list), dim=0)
@@ -689,7 +709,7 @@ class LLMAttribution(BaseLLMAttribution):
         target_probs = torch.exp(target_log_probs)
 
         if _inspect_forward:
-            prompt = self.tokenizer.decode(init_model_inp[0])
+            prompt = self.tokenizer.decode(init_model_inp["input_ids"][0])
             response = self.tokenizer.decode(target_tokens)
 
             # callback for externals to inspect (prompt, response, seq_prob)
@@ -941,9 +961,10 @@ class GradientForwardFunc(nn.Module):
         target_tokens: Tensor,  # 1D tensor of target token ids
         cur_target_idx: int,  # current target index
     ) -> Tensor:
+        # TODO: support model that needs more than just input_ids
         perturbed_input = self.attr._format_model_input(
             inp.to_model_input(perturbed_tensor)
-        )
+        )["input_ids"]
 
         if cur_target_idx:
             # the input batch size can be expanded by attr method
