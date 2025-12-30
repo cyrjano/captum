@@ -620,15 +620,59 @@ class LLMAttribution(BaseLLMAttribution):
         """
         LLM wrapper's forward function that process the concatenated input and target
         in one run. The result logits are often not the same as ones from
-        the actualauto-regression generation process which produces the target string
+        the actual auto-regression generation process which produces the target string
         token by token, due to modern LLMs' internal mechanisms like cache.
         But it's a reasonable approximation for efficiency since it only
-        call the underneath model forward once regardless of the sequence length.
-        In contrast, use _forward_func_by_tokensq to simulate more authentic
+        calls the underlying model forward once regardless of the sequence length.
+        In contrast, use _forward_func_by_tokens to simulate more authentic
         generation process.
         """
-        # dummy return
-        return torch.randn(1)
+        perturbed_input = self._format_model_input(inp.to_model_input(perturbed_tensor))
+
+        input_ids = perturbed_input["input_ids"]
+        target_token_tensor = target_tokens.unsqueeze(0).to(input_ids.device)
+        combined_ids = torch.cat([input_ids, target_token_tensor], dim=1)
+
+        model_inp = {
+            **perturbed_input,
+            "input_ids": combined_ids,
+            "attention_mask": torch.ones(
+                [1, combined_ids.shape[1]], dtype=torch.long, device=combined_ids.device
+            ),
+        }
+
+        outputs = self.model.forward(**model_inp)
+        logits = outputs.logits
+
+        # Llama4 returns a 4D tensor (1, 1, seq_len, vocab_size), though the doc says 3D
+        # the 2nd dim may be n_returns for Speculative Decoding / Medusa-style heads
+        # assume the 2nd dim must be 1
+        if logits.dim() == 4:
+            logits = logits[:, 0]
+
+        input_len = input_ids.shape[1]
+        target_len = target_tokens.shape[0]
+
+        # Extract logits for the positions where we predict target tokens
+        # Get logits for all target positions at once: shape (1, target_len, vocab_size)
+        # logits[i] predicts token[i+1], so need input_len-1 to input_len+target_len-2
+        target_logits = logits[:, input_len - 1 : input_len - 1 + target_len]
+        log_probs = torch.nn.functional.log_softmax(target_logits, dim=2)
+
+        # Gather log probs for the actual target tokens: shape (target_len,)
+        token_log_probs = log_probs[0, torch.arange(target_len), target_tokens].detach()
+        total_log_prob = token_log_probs.sum()
+        # 1st element is the total prob, rest are the target tokens
+        # add a leading dim for batch even we only support single instance for now
+        if self.include_per_token_attr:
+            target_log_probs = torch.cat(
+                [total_log_prob.unsqueeze(0), token_log_probs], dim=0
+            ).unsqueeze(0)
+        else:
+            target_log_probs = total_log_prob
+        target_probs = torch.exp(target_log_probs)
+
+        return target_probs if self.attr_target != "log_prob" else target_log_probs
 
     def _forward_func_by_tokens(
         self,
