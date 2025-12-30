@@ -611,7 +611,26 @@ class LLMAttribution(BaseLLMAttribution):
         ), "attr_target should be either 'log_prob' or 'prob'"
         self.attr_target = attr_target
 
-    def _forward_func(
+    def _forward_func_by_seq(
+        self,
+        perturbed_tensor: Union[None, Tensor],
+        inp: InterpretableInput,
+        target_tokens: Tensor,
+    ) -> Tensor:
+        """
+        LLM wrapper's forward function that process the concatenated input and target
+        in one run. The result logits are often not the same as ones from
+        the actualauto-regression generation process which produces the target string
+        token by token, due to modern LLMs' internal mechanisms like cache.
+        But it's a reasonable approximation for efficiency since it only
+        call the underneath model forward once regardless of the sequence length.
+        In contrast, use _forward_func_by_tokensq to simulate more authentic
+        generation process.
+        """
+        # dummy return
+        return torch.randn(1)
+
+    def _forward_func_by_tokens(
         self,
         perturbed_tensor: Union[None, Tensor],
         inp: InterpretableInput,
@@ -619,6 +638,15 @@ class LLMAttribution(BaseLLMAttribution):
         use_cached_outputs: bool = False,
         _inspect_forward: Optional[Callable[[str, str, List[float]], None]] = None,
     ) -> Tensor:
+        """
+        LLM wrapper's forward function that decode token one by one.
+        This method best authentically replicate the actual generation process of
+        how a model will produce the target string in practice.
+        But it's slow to re-generate target tokens one by one, since each token means
+        calling the underneath model forward once, while _forward_func_by_seq is
+        a more efficient approximation that concatecate all target token and forward
+        in one shot
+        """
         perturbed_input = self._format_model_input(inp.to_model_input(perturbed_tensor))
         init_model_inp = perturbed_input
 
@@ -724,6 +752,30 @@ class LLMAttribution(BaseLLMAttribution):
             _inspect_forward(prompt, response, target_probs[0].tolist())
 
         return target_probs if self.attr_target != "log_prob" else target_log_probs
+
+    def _forward_func(
+        self,
+        perturbed_tensor: Union[None, Tensor],
+        inp: InterpretableInput,
+        target_tokens: Tensor,
+        use_cached_outputs: bool = False,
+        _inspect_forward: Optional[Callable[[str, str, List[float]], None]] = None,
+        forward_in_tokens: bool = True,
+    ) -> Tensor:
+        if forward_in_tokens:
+            return self._forward_func_by_tokens(
+                perturbed_tensor,
+                inp,
+                target_tokens,
+                use_cached_outputs,
+                _inspect_forward,
+            )
+
+        return self._forward_func_by_seq(
+            perturbed_tensor,
+            inp,
+            target_tokens,
+        )
 
     def attribute(
         self,
