@@ -70,6 +70,7 @@ class LLMAttributionResult:
     _seq_attr: Tensor
     _token_attr: Optional[Tensor] = None
     _output_probs: Optional[Tensor] = None
+    inp: Optional[InterpretableInput] = None
 
     def __init__(
         self,
@@ -79,12 +80,19 @@ class LLMAttributionResult:
         seq_attr: npt.ArrayLike,
         token_attr: Optional[npt.ArrayLike] = None,
         output_probs: Optional[npt.ArrayLike] = None,
+        inp: Optional[InterpretableInput] = None,
     ) -> None:
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
         self.seq_attr = seq_attr
         self.token_attr = token_attr
         self.output_probs = output_probs
+
+        # optionally link to the InterpretableInput
+        # to support input type specific utils
+        # For future scaling, a better design may be inheritence,
+        # customized Result class for specifc Input, e.g., ImageMaskLLMAttributionResult
+        self.inp = inp
 
     @property
     def seq_attr(self) -> Tensor:
@@ -916,6 +924,7 @@ class LLMAttribution(BaseLLMAttribution):
             ),  # shape(n_output_token, n_input_features)
             input_tokens=inp.values,
             output_tokens=_convert_ids_to_pretty_tokens(target_tokens, self.tokenizer),
+            inp=inp,
         )
 
     def attribute_future(self) -> Callable[[], LLMAttributionResult]:
