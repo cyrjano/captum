@@ -173,6 +173,12 @@ class LLMAttributionResult:
         Args:
             show (bool): whether to show the plot directly or return the figure and axis
                 Default: False
+
+
+        Returns:
+            None or tuple[Figure, Axes]: If show is True, displays the plot and returns
+                None. If show is False, returns a tuple of (figure, axes) for further
+                customization.
         """
 
         if self.token_attr is None:
@@ -273,6 +279,12 @@ class LLMAttributionResult:
         Args:
             show (bool): whether to show the plot directly or return the figure and axis
                 Default: False
+
+
+        Returns:
+            None or tuple[Figure, Axes]: If show is True, displays the plot and returns
+                None. If show is False, returns a tuple of (figure, axes) for further
+                customization.
         """
 
         import matplotlib.pyplot as plt
@@ -341,6 +353,12 @@ class LLMAttributionResult:
                 the token at the given index. If tuple[int, int], like (m, n), use the
                 summed token attribution of tokens from m to n (noninclusive)
                 Default: None
+
+
+        Returns:
+            None or tuple[Figure, Axes]: If show is True, displays the plot and returns
+                None. If show is False, returns a tuple of (figure, axes) for further
+                customization.
         """
 
         if not isinstance(self.inp, ImageMaskInput):
