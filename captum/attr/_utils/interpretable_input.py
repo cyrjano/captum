@@ -635,6 +635,17 @@ class ImageMaskInput(InterpretableInput):
         return self.processor_fn(perturbed_image)
 
     def format_attr(self, itp_attr: Tensor) -> Tensor:
+        """
+        Attribution for interpretable image segments
+        Returns: 2D tensor of shape (1, n_itp_features)
+        """
+        return itp_attr
+
+    def format_pixel_attr(self, itp_attr: Tensor) -> Tensor:
+        """
+        Attribution for image pixels
+        Returns: 3D tensor of shape (1, height, width)
+        """
         device = itp_attr.device
 
         # Map mask IDs to continuous indices

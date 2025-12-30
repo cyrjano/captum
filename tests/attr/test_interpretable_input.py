@@ -469,23 +469,7 @@ class TestImageMaskInput(BaseTest):
         self.assertTrue(np.all(img_array[:, :, 1] == 128))
         self.assertTrue(np.all(img_array[:, :, 2] == 255))
 
-    def test_format_attr_without_mask(self) -> None:
-        # Setup: create ImageMaskInput without mask
-        image = self._create_test_image(width=5, height=5)
-        mm_input = ImageMaskInput(
-            processor_fn=self._simple_processor,
-            image=image,
-        )
-
-        # Execute: format attribution for single feature
-        attr = torch.tensor([[0.5]])
-        result = mm_input.format_attr(attr)
-
-        # Assert: attribution should be broadcast to all pixels
-        self.assertEqual(result.shape, (1, 5, 5))
-        self.assertTrue(torch.all(result == 0.5))
-
-    def test_format_attr_with_mask(self) -> None:
+    def test_format_pixel_attr_with_mask(self) -> None:
         # Setup: create ImageMaskInput with 2 segments
         image = self._create_test_image(width=10, height=5)
         mask = torch.zeros((5, 10), dtype=torch.int32)
@@ -499,7 +483,7 @@ class TestImageMaskInput(BaseTest):
 
         # Execute: format attribution with different values for each segment
         attr = torch.tensor([[0.3, 0.7]])
-        result = mm_input.format_attr(attr)
+        result = mm_input.format_pixel_attr(attr)
 
         # Assert: left half should have 0.3, right half should have 0.7
         self.assertEqual(result.shape, (1, 5, 10))
@@ -510,7 +494,7 @@ class TestImageMaskInput(BaseTest):
             self, result[0, :, 5:], torch.full((5, 5), 0.7)
         )  # Right half
 
-    def test_format_attr_with_non_continuous_mask(self) -> None:
+    def test_format_pixel_attr_with_non_continuous_mask(self) -> None:
         # Setup: create mask with non-continuous IDs
         image = self._create_test_image(width=15, height=5)
         mask = torch.zeros((5, 15), dtype=torch.int32)
@@ -525,7 +509,7 @@ class TestImageMaskInput(BaseTest):
 
         # Execute: format attribution
         attr = torch.tensor([[0.1, 0.2, 0.3]])
-        result = mm_input.format_attr(attr)
+        result = mm_input.format_pixel_attr(attr)
 
         # Assert: verify correct attribution values for each segment
         self.assertEqual(result.shape, (1, 5, 15))
