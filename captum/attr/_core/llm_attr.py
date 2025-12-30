@@ -323,6 +323,91 @@ class LLMAttributionResult:
         else:
             return fig, ax
 
+    def plot_image_heatmap(
+        self,
+        show: bool = False,
+        target_token_pos: Union[int, tuple[int, int], None] = None,
+    ) -> Union[None, Tuple["Figure", "Axes"]]:
+        """
+        Plot the image in the input with the overlay of salience based on
+        the attribution. Only available for certain multi-modality input types.
+
+        Args:
+            show (bool): whether to show the plot directly or return the figure and axis
+                Default: False
+            target_token_pos (int or tuple[int, int] or None): target token positions.
+                Compute salience w.r.t the target tokens of the specified positions.
+                If None, use the sequence attribuition. If int, use the attribution of
+                the token at the given index. If tuple[int, int], like (m, n), use the
+                summed token attribution of tokens from m to n (noninclusive)
+                Default: None
+        """
+
+        if not isinstance(self.inp, ImageMaskInput):
+            raise ValueError("plot_image_heatmap is only available for ImageMaskInput")
+
+        inp = self.inp
+
+        import matplotlib.pyplot as plt
+
+        if target_token_pos is None:
+            attr = self.seq_attr
+        else:
+            if self.token_attr is None:
+                raise ValueError(
+                    "token_attr is None (no token-level attribution was performed), "
+                    "please use target_token_pos=None for sequence-level attribution"
+                )
+
+            if isinstance(target_token_pos, int):
+                attr = self.token_attr[target_token_pos]
+            else:
+                from_pos, to_pos = target_token_pos
+                attr = self.token_attr[from_pos:to_pos].sum(dim=0)
+
+        pixel_attr = inp.format_pixel_attr(attr.unsqueeze(0))
+        pixel_attr = pixel_attr.squeeze(0).cpu().numpy()
+
+        max_abs_attr_val = np.abs(pixel_attr).max()
+
+        fig, ax = plt.subplots()
+
+        ax.imshow(inp.image)
+
+        colors = [
+            "#93003a",
+            "#d0365b",
+            "#f57789",
+            "#ffbdc3",
+            "#ffffff",
+            "#a4d6e1",
+            "#73a3ca",
+            "#4772b3",
+            "#00429d",
+        ]
+
+        heatmap = ax.imshow(
+            pixel_attr,
+            vmax=max_abs_attr_val,
+            vmin=-max_abs_attr_val,
+            cmap=mcolors.LinearSegmentedColormap.from_list(
+                name="colors", colors=colors
+            ),
+            alpha=0.7,
+        )
+
+        fig.set_facecolor("white")
+        cbar = fig.colorbar(heatmap, ax=ax)
+        cbar.ax.set_ylabel("Attribution", rotation=-90, va="bottom")
+
+        ax.axis("off")
+
+        if show:
+            plt.show()
+            return None
+        else:
+            return fig, ax
+
 
 def _clean_up_pretty_token(token: str) -> str:
     """Remove newlines and leading/trailing whitespace from token."""
@@ -696,7 +781,7 @@ class LLMAttribution(BaseLLMAttribution):
         how a model will produce the target string in practice.
         But it's slow to re-generate target tokens one by one, since each token means
         calling the underneath model forward once, while _forward_func_by_seq is
-        a more efficient approximation that concatecate all target token and forward
+        a more efficient approximation that concatenate all target token and forward
         in one shot
         """
         perturbed_input = self._format_model_input(inp.to_model_input(perturbed_tensor))
