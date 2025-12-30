@@ -830,6 +830,7 @@ class LLMAttribution(BaseLLMAttribution):
         use_cached_outputs: bool = True,
         # internal callback hook can be used for logging
         _inspect_forward: Optional[Callable[[str, str, List[float]], None]] = None,
+        forward_in_tokens: bool = True,
         **kwargs: Any,
     ) -> LLMAttributionResult:
         """
@@ -851,6 +852,13 @@ class LLMAttribution(BaseLLMAttribution):
                     generating tokens in sequence. Only support huggingface
                     GenerationMixin, since this functionality has to depend on the
                     actual APIs of the model
+                    Defaults: True.
+            forward_in_tokens (bool, optional): whether to use token-by-token forward
+                    or sequence-level forward. When True, it decodes tokens one by one
+                    to replicate the actual generation process authentically. When
+                    False, it concatenates the input and target tokens and forwards
+                    them in one pass, which is more efficient but may produce slightly
+                    different logits due to modern LLMs' internal mechanisms like cache.
                     Defaults: True.
             **kwargs (Any): any extra keyword arguments passed to the call of the
                     underlying attribute function of the given attribution instance
@@ -885,6 +893,7 @@ class LLMAttribution(BaseLLMAttribution):
                     target_tokens,
                     use_cached_outputs,
                     _inspect_forward,
+                    forward_in_tokens,
                 ),
                 **kwargs,
             )
@@ -1197,6 +1206,12 @@ class RemoteLLMAttribution(LLMAttribution):
         target_tokens: Tensor,
         use_cached_outputs: bool = False,
         _inspect_forward: Optional[Callable[[str, str, List[float]], None]] = None,
+        # forward_in_tokens here is for compatibility only
+        # for remote, depend on the underlying LLM API
+        # may not be able to support generate the exact
+        # target tokens one by one (forced decoding)
+        # VLLMProvider for now only support concat sequence forward
+        forward_in_tokens: bool = False,
     ) -> Tensor:
         """
         Forward function for the remote LLM provider.
