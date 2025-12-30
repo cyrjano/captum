@@ -684,9 +684,17 @@ class LLMAttribution(BaseLLMAttribution):
                 model_inp["attention_mask"] = attention_mask
                 outputs = self.model.forward(**model_inp)
 
-            new_token_logits = outputs.logits[:, -1]
-            log_probs = torch.nn.functional.log_softmax(new_token_logits, dim=1)
+            logits = outputs.logits
 
+            # Llama4 returns a 4D tensor (1, 1, 744, 202048), though the doc says 3D
+            # https://huggingface.co/docs/transformers/v4.57.3/en/model_doc/llama4#transformers.Llama4ForConditionalGeneration.forward
+            # the 2nd dim may be n_returns for Speculative Decoding / Medusa-style heads
+            # assume the 2nd dim must be 1
+            if logits.dim() == 4:
+                logits = logits[:, 0]
+
+            new_token_logits = logits[:, -1]
+            log_probs = torch.nn.functional.log_softmax(new_token_logits, dim=1)
             log_prob_list.append(log_probs[0][target_token].detach())
 
             model_inp["input_ids"] = torch.cat(
