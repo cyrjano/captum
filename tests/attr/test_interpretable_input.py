@@ -526,3 +526,162 @@ class TestImageMaskInput(BaseTest):
         self.assertTrue(torch.all(result[0, :, :5] == segment_0_value))
         self.assertTrue(torch.all(result[0, :, 5:10] == segment_10_value))
         self.assertTrue(torch.all(result[0, :, 10:] == segment_20_value))
+
+    # Tests for mask_list functionality
+
+    def test_init_mask_list_ignores_mask(self) -> None:
+        # Setup: provide both mask and mask_list
+        image = self._create_test_image(width=10, height=10)
+        # mask has 3 segments
+        mask = torch.zeros((10, 10), dtype=torch.int32)
+        mask[:, 3:7] = 1
+        mask[:, 7:] = 2
+        # mask_list has 2 masks
+        mask1 = torch.zeros((10, 10), dtype=torch.bool)
+        mask1[:, :5] = True
+        mask2 = torch.zeros((10, 10), dtype=torch.bool)
+        mask2[:, 5:] = True
+
+        # Execute: create ImageMaskInput with both mask and mask_list
+        mm_input = ImageMaskInput(
+            processor_fn=self._simple_processor,
+            image=image,
+            mask=mask,
+            mask_list=[mask1, mask2],
+        )
+
+        # Assert: mask_list takes precedence, so n_itp_features should be 2
+        self.assertEqual(mm_input.n_itp_features, 2)
+        self.assertEqual(len(mm_input.mask_list), 2)
+
+    def test_to_tensor_with_mask_list(self) -> None:
+        # Setup: create ImageMaskInput with 3 masks
+        image = self._create_test_image(width=15, height=10)
+        mask1 = torch.zeros((10, 15), dtype=torch.bool)
+        mask1[:, :5] = True
+        mask2 = torch.zeros((10, 15), dtype=torch.bool)
+        mask2[:, 5:10] = True
+        mask3 = torch.zeros((10, 15), dtype=torch.bool)
+        mask3[:, 10:] = True
+
+        mm_input = ImageMaskInput(
+            processor_fn=self._simple_processor,
+            image=image,
+            mask_list=[mask1, mask2, mask3],
+        )
+
+        # Execute: convert to tensor
+        result = mm_input.to_tensor()
+
+        # Assert: verify tensor has correct number of features
+        expected = torch.tensor([[1.0, 1.0, 1.0]])
+        assertTensorAlmostEqual(self, result, expected)
+
+    def test_to_model_input_with_mask_list(self) -> None:
+        # Setup: create image with 2 halves (left red, right green)
+        img_array = np.zeros((10, 10, 3), dtype=np.uint8)
+        img_array[:, :5] = [255, 0, 0]  # Left half red
+        img_array[:, 5:] = [0, 255, 0]  # Right half green
+        image = PIL.Image.fromarray(img_array)
+
+        mask1 = torch.zeros((10, 10), dtype=torch.bool)
+        mask1[:, :5] = True  # Left half
+        mask2 = torch.zeros((10, 10), dtype=torch.bool)
+        mask2[:, 5:] = True  # Right half
+
+        mm_input = ImageMaskInput(
+            processor_fn=self._simple_processor,
+            image=image,
+            mask_list=[mask1, mask2],
+            baseline=(255, 255, 255),
+        )
+
+        # Execute: keep left half (0), remove right half (1)
+        perturbed_tensor = torch.tensor([[1.0, 0.0]])
+        result = mm_input.to_model_input(perturbed_tensor)
+
+        # Assert: left half should be red, right half should be white
+        img_array = result["pixel_values"].numpy().astype(np.uint8)
+        # Left half should be red
+        self.assertTrue(np.all(img_array[:, :5, 0] == 255))
+        self.assertTrue(np.all(img_array[:, :5, 1] == 0))
+        # Right half should be white (baseline)
+        self.assertTrue(np.all(img_array[:, 5:] == 255))
+
+    def test_to_model_input_with_mask_list_overlapping(self) -> None:
+        # Setup: create red image with overlapping masks
+        image = self._create_test_image(color=(255, 0, 0))
+        mask1 = torch.zeros((10, 10), dtype=torch.bool)
+        mask1[:, :7] = True  # Left 7 columns
+        mask2 = torch.zeros((10, 10), dtype=torch.bool)
+        mask2[:, 3:] = True  # Right 7 columns (overlap at columns 3-6)
+
+        mm_input = ImageMaskInput(
+            processor_fn=self._simple_processor,
+            image=image,
+            mask_list=[mask1, mask2],
+            baseline=(255, 255, 255),
+        )
+
+        # Execute: remove first feature (mask1), keep second (mask2)
+        perturbed_tensor = torch.tensor([[0.0, 1.0]])
+        result = mm_input.to_model_input(perturbed_tensor)
+
+        # Assert: left 7 columns (covered by mask1) should be white
+        # even though columns 3-6 are also in mask2 (but mask1 sets them to baseline)
+        img_array = result["pixel_values"].numpy().astype(np.uint8)
+        self.assertTrue(np.all(img_array[:, :7] == 255))
+
+    def test_format_pixel_attr_with_mask_list(self) -> None:
+        # Setup: create ImageMaskInput with 2 non-overlapping masks
+        image = self._create_test_image(width=10, height=5)
+        mask1 = torch.zeros((5, 10), dtype=torch.bool)
+        mask1[:, :5] = True  # Left half
+        mask2 = torch.zeros((5, 10), dtype=torch.bool)
+        mask2[:, 5:] = True  # Right half
+
+        mm_input = ImageMaskInput(
+            processor_fn=self._simple_processor,
+            image=image,
+            mask_list=[mask1, mask2],
+        )
+
+        # Execute: format attribution
+        attr = torch.tensor([[0.3, 0.7]])
+        result = mm_input.format_pixel_attr(attr)
+
+        # Assert: left half should have 0.3, right half should have 0.7
+        self.assertEqual(result.shape, (1, 5, 10))
+        assertTensorAlmostEqual(
+            self, result[0, :, :5], torch.full((5, 5), 0.3)
+        )  # Left half
+        assertTensorAlmostEqual(
+            self, result[0, :, 5:], torch.full((5, 5), 0.7)
+        )  # Right half
+
+    def test_format_pixel_attr_with_mask_list_overlapping(self) -> None:
+        # Setup: create ImageMaskInput with overlapping masks
+        image = self._create_test_image(width=10, height=5)
+        mask1 = torch.zeros((5, 10), dtype=torch.bool)
+        mask1[:, :7] = True  # Left 7 columns
+        mask2 = torch.zeros((5, 10), dtype=torch.bool)
+        mask2[:, 3:] = True  # Right 7 columns (overlap at columns 3-6)
+
+        mm_input = ImageMaskInput(
+            processor_fn=self._simple_processor,
+            image=image,
+            mask_list=[mask1, mask2],
+        )
+
+        # Execute: format attribution with values 0.3 for mask1, 0.5 for mask2
+        attr = torch.tensor([[0.3, 0.5]])
+        result = mm_input.format_pixel_attr(attr)
+
+        # Assert: overlapping region should have summed attribution
+        self.assertEqual(result.shape, (1, 5, 10))
+        # Columns 0-2: only mask1 (0.3)
+        assertTensorAlmostEqual(self, result[0, :, :3], torch.full((5, 3), 0.3))
+        # Columns 3-6: both masks (0.3 + 0.5 = 0.8)
+        assertTensorAlmostEqual(self, result[0, :, 3:7], torch.full((5, 4), 0.8))
+        # Columns 7-9: only mask2 (0.5)
+        assertTensorAlmostEqual(self, result[0, :, 7:], torch.full((5, 3), 0.5))
