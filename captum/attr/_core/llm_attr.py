@@ -206,25 +206,12 @@ class LLMAttributionResult:
         fig.set_size_inches(
             max(data.shape[1] * 1.3, 6.4), max(data.shape[0] / 2.5, 4.8)
         )
-        colors = [
-            "#93003a",
-            "#d0365b",
-            "#f57789",
-            "#ffbdc3",
-            "#ffffff",
-            "#a4d6e1",
-            "#73a3ca",
-            "#4772b3",
-            "#00429d",
-        ]
 
         im = ax.imshow(
             data,
             vmax=max_abs_attr_val,
             vmin=-max_abs_attr_val,
-            cmap=mcolors.LinearSegmentedColormap.from_list(
-                name="colors", colors=colors
-            ),
+            cmap=self._get_plot_color_map(),
             aspect="auto",
         )
         fig.set_facecolor("white")
@@ -392,25 +379,11 @@ class LLMAttributionResult:
 
         ax.imshow(inp.image)
 
-        colors = [
-            "#93003a",
-            "#d0365b",
-            "#f57789",
-            "#ffbdc3",
-            "#ffffff",
-            "#a4d6e1",
-            "#73a3ca",
-            "#4772b3",
-            "#00429d",
-        ]
-
         heatmap = ax.imshow(
             pixel_attr,
             vmax=max_abs_attr_val,
             vmin=-max_abs_attr_val,
-            cmap=mcolors.LinearSegmentedColormap.from_list(
-                name="colors", colors=colors
-            ),
+            cmap=self._get_plot_color_map(),
             alpha=0.7,
         )
 
@@ -425,6 +398,22 @@ class LLMAttributionResult:
             return None
         else:
             return fig, ax
+
+    def _get_plot_color_map(self) -> mcolors.LinearSegmentedColormap:
+        return mcolors.LinearSegmentedColormap.from_list(
+            name="colors",
+            colors=[
+                "#93003a",
+                "#d0365b",
+                "#f57789",
+                "#ffbdc3",
+                "#ffffff",
+                "#a4d6e1",
+                "#73a3ca",
+                "#4772b3",
+                "#00429d",
+            ],
+        )
 
 
 def _clean_up_pretty_token(token: str) -> str:
