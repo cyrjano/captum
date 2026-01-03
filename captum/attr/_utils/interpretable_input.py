@@ -1,6 +1,16 @@
 # pyre-strict
 from abc import ABC, abstractmethod
-from typing import Any, Callable, cast, Dict, List, Optional, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    cast,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    TYPE_CHECKING,
+    Union,
+)
 
 import numpy as np
 import PIL.Image
@@ -8,6 +18,9 @@ import torch
 
 from captum._utils.typing import TokenizerLike
 from torch import Tensor
+
+if TYPE_CHECKING:
+    from matplotlib.pyplot import Axes, Figure
 
 
 def _scatter_itp_attr_by_mask(
@@ -711,3 +724,43 @@ class ImageMaskInput(InterpretableInput):
                 formatted_mask.unsqueeze(0),
             )
             return formatted_attr
+
+    def plot_mask_overlay(
+        self, show: bool = False
+    ) -> Union[None, Tuple["Figure", "Axes"]]:
+        """
+        util to help visualize the mask segementation
+        """
+
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots()
+
+        ax.imshow(self.image)
+        fig.set_facecolor("white")
+
+        # random colors for all interpretable features
+        opacity = 0.6
+        colors = [
+            np.array([*np.random.random(3), opacity])
+            for _ in range(self.n_itp_features)
+        ]
+
+        # Create mask_list from mask if not provided
+        mask_list = self.mask_list or [
+            self.mask == mask_id for mask_id in self.mask_id_to_idx.keys()
+        ]
+
+        for itp_idx, mask in enumerate(mask_list):
+            mask = mask.numpy()
+            h, w = mask.shape[-2:]
+            mask_image = mask.reshape(h, w, 1) * colors[itp_idx].reshape(1, 1, -1)
+            ax.imshow(mask_image)
+
+        ax.axis("off")
+
+        if show:
+            plt.show()
+            return None
+        else:
+            return fig, ax
