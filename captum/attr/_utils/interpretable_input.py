@@ -726,7 +726,7 @@ class ImageMaskInput(InterpretableInput):
             return formatted_attr
 
     def plot_mask_overlay(
-        self, show: bool = False, border_width: int = 0
+        self, show: bool = False, border_width: int = 0, show_legends: bool = True
     ) -> Union[None, Tuple["Figure", "Axes"]]:
         """
         util to help visualize the mask segementation
@@ -736,6 +736,8 @@ class ImageMaskInput(InterpretableInput):
                   If False, return the figure and axes objects.
             border_width: Width of the border around each segment in pixels.
                           Set to 0 to disable borders. Default is 0.
+            show_legends: If True, display the mask id for each segment at its
+                          centroid. Default is True.
         """
 
         import matplotlib.pyplot as plt
@@ -760,19 +762,38 @@ class ImageMaskInput(InterpretableInput):
             self.mask == mask_id for mask_id in self.mask_id_to_idx.keys()
         ]
 
-        for mask, color in zip(mask_list, colors):
-            mask = mask.numpy().astype(bool)
-            h, w = mask.shape
-            mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+        for mask, color, mid in zip(mask_list, colors, self.mask_id_to_idx.keys()):
+            mask_np = mask.numpy().astype(bool)
+            h, w = mask_np.shape
+            mask_image = mask_np.reshape(h, w, 1) * color.reshape(1, 1, -1)
             ax.imshow(mask_image)
 
             # Add border inside each segment using erosion
             if border_width > 0:
-                eroded = binary_erosion(mask, iterations=border_width)
-                border = mask & ~eroded
+                eroded = binary_erosion(mask_np, iterations=border_width)
+                border = mask_np & ~eroded
                 border_color = np.array([*color[:3], 0.8])
                 border_image = border.reshape(h, w, 1) * border_color.reshape(1, 1, -1)
                 ax.imshow(border_image)
+
+            # Calculate centroid and display mask id
+            if show_legends and mask_np.any():
+                rows, cols = np.where(mask_np)
+                centroid_y, centroid_x = rows.mean(), cols.mean()
+                ax.text(
+                    centroid_x,
+                    centroid_y,
+                    str(mid),
+                    color="white",
+                    fontsize=10,
+                    ha="center",
+                    va="center",
+                    bbox={
+                        "boxstyle": "round,pad=0.2",
+                        "facecolor": "black",
+                        "alpha": 0.6,
+                    },
+                )
 
         ax.axis("off")
 
