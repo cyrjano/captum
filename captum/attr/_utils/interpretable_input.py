@@ -726,13 +726,22 @@ class ImageMaskInput(InterpretableInput):
             return formatted_attr
 
     def plot_mask_overlay(
-        self, show: bool = False
+        self, show: bool = False, border_width: int = 0
     ) -> Union[None, Tuple["Figure", "Axes"]]:
         """
         util to help visualize the mask segementation
+
+        Args:
+            show: If True, display the plot immediately using plt.show().
+                  If False, return the figure and axes objects.
+            border_width: Width of the border around each segment in pixels.
+                          Set to 0 to disable borders. Default is 0.
         """
 
         import matplotlib.pyplot as plt
+
+        # scipy is not within install_requires of captum
+        from scipy.ndimage import binary_erosion
 
         fig, ax = plt.subplots()
 
@@ -751,11 +760,19 @@ class ImageMaskInput(InterpretableInput):
             self.mask == mask_id for mask_id in self.mask_id_to_idx.keys()
         ]
 
-        for itp_idx, mask in enumerate(mask_list):
-            mask = mask.numpy()
-            h, w = mask.shape[-2:]
-            mask_image = mask.reshape(h, w, 1) * colors[itp_idx].reshape(1, 1, -1)
+        for mask, color in zip(mask_list, colors):
+            mask = mask.numpy().astype(bool)
+            h, w = mask.shape
+            mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
             ax.imshow(mask_image)
+
+            # Add border inside each segment using erosion
+            if border_width > 0:
+                eroded = binary_erosion(mask, iterations=border_width)
+                border = mask & ~eroded
+                border_color = np.array([*color[:3], 0.8])
+                border_image = border.reshape(h, w, 1) * border_color.reshape(1, 1, -1)
+                ax.imshow(border_image)
 
         ax.axis("off")
 
