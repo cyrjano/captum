@@ -679,6 +679,19 @@ class ImageMaskInput(InterpretableInput):
 
         return self.processor_fn(perturbed_image)
 
+    def get_mask_list(self) -> List[Tensor]:
+        """
+        Get the list of binary masks for each interpretable feature.
+        If mask_list is provided, return it directly. Otherwise, create
+        a list of binary masks from the mask tensor.
+
+        Returns:
+            List[Tensor]: list of binary masks, one for each interpretable feature
+        """
+        return self.mask_list or [
+            self.mask == mask_id for mask_id in self.mask_id_to_idx.keys()
+        ]
+
     def format_attr(self, itp_attr: Tensor) -> Tensor:
         """
         Attribution for interpretable image segments
@@ -757,10 +770,7 @@ class ImageMaskInput(InterpretableInput):
             for _ in range(self.n_itp_features)
         ]
 
-        # Create mask_list from mask if not provided
-        mask_list = self.mask_list or [
-            self.mask == mask_id for mask_id in self.mask_id_to_idx.keys()
-        ]
+        mask_list = self.get_mask_list()
 
         for mask, color, mid in zip(mask_list, colors, self.mask_id_to_idx.keys()):
             mask_np = mask.numpy().astype(bool)
