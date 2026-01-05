@@ -435,19 +435,10 @@ class LLMAttributionResult:
             return fig, ax
 
     def _get_plot_color_map(self) -> mcolors.LinearSegmentedColormap:
+        # stays unified with the color convention used in Captum
+        # https://github.com/meta-pytorch/captum/blob/master/captum/attr/_utils/visualization.py
         return mcolors.LinearSegmentedColormap.from_list(
-            name="colors",
-            colors=[
-                "#93003a",
-                "#d0365b",
-                "#f57789",
-                "#ffbdc3",
-                "#ffffff",
-                "#a4d6e1",
-                "#73a3ca",
-                "#4772b3",
-                "#00429d",
-            ],
+            "RdWhGn", ["red", "white", "green"]
         )
 
 
