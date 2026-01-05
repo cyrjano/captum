@@ -379,7 +379,7 @@ class LLMAttributionResult:
                 attr = self.token_attr[from_pos:to_pos].sum(dim=0)
 
         fig, ax = plt.subplots()
-        ax.imshow(inp.image)
+        ax.imshow(np.array(inp.image).mean(axis=2), cmap="gray")
 
         # Get pixel-level attribution using format_pixel_attr
         pixel_attr = inp.format_pixel_attr(attr.unsqueeze(0))
