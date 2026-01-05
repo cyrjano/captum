@@ -38,6 +38,113 @@ except ImportError:
     HAS_IPYTHON = False
 
 
+def draw_mask_border(
+    ax: Axes,
+    mask: npt.NDArray[np.bool_],
+    border_width: int = 1,
+    border_color: Union[str, npt.NDArray[np.floating[Any]]] = "black",
+) -> None:
+    """
+    Draw a border inside a mask region using binary erosion.
+
+    This function generates a border by eroding the mask and taking the difference
+    between the original mask and the eroded version, then displays it on the axes.
+
+    Args:
+        ax: Matplotlib axes object to draw on.
+        mask: 2D boolean numpy array representing the mask region.
+              Shape should be (height, width).
+        border_width: Width of the border in pixels.
+                      Default: 1
+        border_color: Color for the border. Can be a string color name (e.g.,
+                      "black", "red") or an RGBA array of shape (4,) with values
+                      typically in [0, 1].
+                      Default: "black"
+
+    Example::
+        >>> mask = np.array([[True, True, True],
+        ...                  [True, True, True],
+        ...                  [True, True, True]])
+        >>> fig, ax = plt.subplots()
+        >>> draw_mask_border(ax, mask)  # Uses default black border
+        >>> draw_mask_border(ax, mask, border_width=2, border_color="red")
+    """
+    if not mask.any():
+        return
+
+    from scipy.ndimage import binary_erosion
+
+    # Convert string color to RGBA array
+    if isinstance(border_color, str):
+        rgba = colors.to_rgba(border_color)
+        border_color_array = np.array(rgba)
+    else:
+        border_color_array = border_color
+
+    eroded = binary_erosion(mask, iterations=border_width)
+    border = mask & ~eroded
+    h, w = mask.shape
+    border_image = border.reshape(h, w, 1) * border_color_array.reshape(1, 1, -1)
+    ax.imshow(border_image)
+
+
+def draw_mask_legend(
+    ax: Axes,
+    mask: npt.NDArray[np.bool_],
+    label: str,
+    fontsize: int = 10,
+    text_color: str = "white",
+    bbox_facecolor: str = "black",
+    bbox_alpha: float = 0.6,
+) -> None:
+    """
+    Draw a label at the centroid of a mask region.
+
+    This function calculates the centroid (center of mass) of a boolean mask
+    and places a text label at that position.
+
+    Args:
+        ax: Matplotlib axes object to draw on.
+        mask: 2D boolean numpy array representing the mask region.
+              Shape should be (height, width).
+        label: Text string to display at the centroid.
+        fontsize: Font size for the label text.
+                  Default: 10
+        text_color: Color of the label text.
+                    Default: "white"
+        bbox_facecolor: Background color of the text bounding box.
+                        Default: "black"
+        bbox_alpha: Transparency of the text bounding box.
+                    Default: 0.6
+
+    Example::
+        >>> mask = np.array([[False, True, True],
+        ...                  [False, True, True],
+        ...                  [False, False, False]])
+        >>> fig, ax = plt.subplots()
+        >>> draw_mask_legend(ax, mask, label="1")
+    """
+    if not mask.any():
+        return
+
+    rows, cols = np.where(mask)
+    centroid_y, centroid_x = rows.mean(), cols.mean()
+    ax.text(
+        centroid_x,
+        centroid_y,
+        label,
+        color=text_color,
+        fontsize=fontsize,
+        ha="center",
+        va="center",
+        bbox={
+            "boxstyle": "round,pad=0.2",
+            "facecolor": bbox_facecolor,
+            "alpha": bbox_alpha,
+        },
+    )
+
+
 class ImageVisualizationMethod(Enum):
     heat_map = 1
     blended_heat_map = 2

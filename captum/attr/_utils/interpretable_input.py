@@ -17,6 +17,7 @@ import PIL.Image
 import torch
 
 from captum._utils.typing import TokenizerLike
+from captum.attr._utils.visualization import draw_mask_border, draw_mask_legend
 from torch import Tensor
 
 if TYPE_CHECKING:
@@ -755,9 +756,6 @@ class ImageMaskInput(InterpretableInput):
 
         import matplotlib.pyplot as plt
 
-        # scipy is not within install_requires of captum
-        from scipy.ndimage import binary_erosion
-
         fig, ax = plt.subplots()
 
         ax.imshow(self.image)
@@ -780,30 +778,12 @@ class ImageMaskInput(InterpretableInput):
 
             # Add border inside each segment using erosion
             if border_width > 0:
-                eroded = binary_erosion(mask_np, iterations=border_width)
-                border = mask_np & ~eroded
                 border_color = np.array([*color[:3], 0.8])
-                border_image = border.reshape(h, w, 1) * border_color.reshape(1, 1, -1)
-                ax.imshow(border_image)
+                draw_mask_border(ax, mask_np, border_width, border_color)
 
             # Calculate centroid and display mask id
-            if show_legends and mask_np.any():
-                rows, cols = np.where(mask_np)
-                centroid_y, centroid_x = rows.mean(), cols.mean()
-                ax.text(
-                    centroid_x,
-                    centroid_y,
-                    str(mid),
-                    color="white",
-                    fontsize=10,
-                    ha="center",
-                    va="center",
-                    bbox={
-                        "boxstyle": "round,pad=0.2",
-                        "facecolor": "black",
-                        "alpha": 0.6,
-                    },
-                )
+            if show_legends:
+                draw_mask_legend(ax, mask_np, label=str(mid))
 
         ax.axis("off")
 
