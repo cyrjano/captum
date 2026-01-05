@@ -43,6 +43,7 @@ from captum.attr._utils.interpretable_input import (
     TextTemplateInput,
     TextTokenInput,
 )
+from captum.attr._utils.visualization import draw_mask_border, draw_mask_legend
 
 if TYPE_CHECKING:
     from matplotlib.pyplot import Axes, Figure
@@ -326,6 +327,8 @@ class LLMAttributionResult:
         self,
         show: bool = False,
         target_token_pos: Union[int, tuple[int, int], None] = None,
+        border_width: int = 2,
+        show_legends: bool = True,
     ) -> Union[None, Tuple["Figure", "Axes"]]:
         """
         Plot the image in the input with the overlay of salience based on
@@ -340,6 +343,12 @@ class LLMAttributionResult:
                 the token at the given index. If tuple[int, int], like (m, n), use the
                 summed token attribution of tokens from m to n (noninclusive)
                 Default: None
+            border_width (int): Width of the border around each mask segment in pixels.
+                Set to 0 to disable borders. Only used when input has mask_list.
+                Default: 2
+            show_legends (bool): If True, display the mask id for each segment at its
+                centroid. Only used when input has mask_list.
+                Default: True
 
 
         Returns:
@@ -348,10 +357,9 @@ class LLMAttributionResult:
                 customization.
         """
 
-        if not isinstance(self.inp, ImageMaskInput):
-            raise ValueError("plot_image_heatmap is only available for ImageMaskInput")
-
         inp = self.inp
+        if not isinstance(inp, ImageMaskInput):
+            raise ValueError("plot_image_heatmap is only available for ImageMaskInput")
 
         import matplotlib.pyplot as plt
 
@@ -370,27 +378,54 @@ class LLMAttributionResult:
                 from_pos, to_pos = target_token_pos
                 attr = self.token_attr[from_pos:to_pos].sum(dim=0)
 
+        fig, ax = plt.subplots()
+        ax.imshow(inp.image)
+
+        # Get pixel-level attribution using format_pixel_attr
         pixel_attr = inp.format_pixel_attr(attr.unsqueeze(0))
         pixel_attr = pixel_attr.squeeze(0).cpu().numpy()
 
         max_abs_attr_val = np.abs(pixel_attr).max()
-
-        fig, ax = plt.subplots()
-
-        ax.imshow(inp.image)
-
+        alpha = 0.8
         heatmap = ax.imshow(
             pixel_attr,
             vmax=max_abs_attr_val,
             vmin=-max_abs_attr_val,
             cmap=self._get_plot_color_map(),
-            alpha=0.7,
+            alpha=alpha,
         )
 
-        fig.set_facecolor("white")
         cbar = fig.colorbar(heatmap, ax=ax)
         cbar.ax.set_ylabel("Attribution", rotation=-90, va="bottom")
 
+        # Draw borders and legends on top if mask_list is available
+        if hasattr(inp, "get_mask_list"):
+            mask_list = [m.numpy().astype(bool) for m in inp.get_mask_list()]
+            mask_ids = list(inp.mask_id_to_idx.keys())
+            cmap = self._get_plot_color_map()
+
+            # Get attribution values for border color calculation
+            attr_np = attr.cpu().numpy()
+
+            for i, mask in enumerate(mask_list):
+                if not mask.any():
+                    continue
+
+                if border_width > 0:
+                    # Calculate border color as a darker version of the salience color
+                    norm_val = (
+                        (attr_np[i] / max_abs_attr_val + 1) / 2
+                        if max_abs_attr_val > 0
+                        else 0.5
+                    )
+                    rgba = np.array(cmap(norm_val))
+                    # Create darker version by multiplying RGB by 0.6
+                    border_color = np.array([*(rgba[:3] * 0.7), alpha])
+                    draw_mask_border(ax, mask, border_width, border_color=border_color)
+                if show_legends:
+                    draw_mask_legend(ax, mask, label=str(mask_ids[i]))
+
+        fig.set_facecolor("white")
         ax.axis("off")
 
         if show:
