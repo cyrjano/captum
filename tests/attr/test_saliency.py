@@ -7,7 +7,6 @@ import torch
 from captum._utils.typing import TensorOrTupleOfTensorsGeneric
 from captum.attr._core.noise_tunnel import NoiseTunnel
 from captum.attr._core.saliency import Saliency
-
 from captum.testing.attr.helpers.get_config_util import (
     get_basic_config,
     get_multiargs_basic_config,

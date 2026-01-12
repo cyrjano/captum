@@ -15,7 +15,6 @@ from typing import (
 import numpy as np
 import PIL.Image
 import torch
-
 from captum._utils.typing import TokenizerLike
 from captum.attr._utils.visualization import draw_mask_border, draw_mask_legend
 from torch import Tensor

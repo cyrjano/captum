@@ -6,7 +6,6 @@ from typing import Callable, cast, Dict, List, Optional, Tuple, Union
 from unittest.mock import Mock, patch
 
 import torch
-
 from captum.attr._core.dataloader_attr import DataLoaderAttribution, InputRole
 from captum.attr._core.feature_ablation import FeatureAblation
 from captum.testing.helpers.basic import (

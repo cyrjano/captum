@@ -17,7 +17,6 @@ from typing import (
 )
 
 import matplotlib
-
 import numpy as np
 import numpy.typing as npt
 from matplotlib import cm, colors, pyplot as plt

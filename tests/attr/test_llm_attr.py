@@ -3,10 +3,8 @@
 # pyre-strict
 
 import copy
-
 from collections import UserDict
 from dataclasses import dataclass
-
 from typing import (
     Any,
     cast,

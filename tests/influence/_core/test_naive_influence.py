@@ -3,7 +3,6 @@ import tempfile
 from typing import Callable, List, Optional, Tuple
 
 import torch
-
 import torch.nn as nn
 from captum.influence._core.influence_function import NaiveInfluenceFunction
 from captum.influence._utils.common import (
